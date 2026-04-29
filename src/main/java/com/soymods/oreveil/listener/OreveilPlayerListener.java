@@ -1,6 +1,7 @@
 package com.soymods.oreveil.listener;
 
 import com.soymods.oreveil.config.OreveilConfig;
+import com.soymods.oreveil.obfuscation.NetworkObfuscationService;
 import com.soymods.oreveil.obfuscation.scan.ChunkObfuscationPrimer;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
@@ -11,6 +12,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.plugin.Plugin;
@@ -19,15 +21,18 @@ import org.bukkit.scheduler.BukkitScheduler;
 public final class OreveilPlayerListener implements Listener {
     private final Plugin plugin;
     private final ChunkObfuscationPrimer primer;
+    private final NetworkObfuscationService obfuscationService;
     private final java.util.function.Supplier<OreveilConfig> configSupplier;
 
     public OreveilPlayerListener(
         Plugin plugin,
         ChunkObfuscationPrimer primer,
+        NetworkObfuscationService obfuscationService,
         java.util.function.Supplier<OreveilConfig> configSupplier
     ) {
         this.plugin = plugin;
         this.primer = primer;
+        this.obfuscationService = obfuscationService;
         this.configSupplier = configSupplier;
     }
 
@@ -55,6 +60,33 @@ public final class OreveilPlayerListener implements Listener {
         if (crossesChunk(event.getFrom(), event.getTo()) || event.getFrom().getWorld() != event.getTo().getWorld()) {
             schedulePrime(event.getPlayer(), event.getTo(), 2L);
         }
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    public void onMove(PlayerMoveEvent event) {
+        if (event.getTo() == null) {
+            return;
+        }
+        if (event.getFrom().getWorld() != event.getTo().getWorld()) {
+            return;
+        }
+        if (sameBlock(event.getFrom(), event.getTo())) {
+            return;
+        }
+
+        OreveilConfig config = configSupplier.get();
+        if (config.revealProximityBlocks() <= 0) {
+            return;
+        }
+
+        int step = Math.max(2, Math.min(4, config.revealProximityBlocks() / 2));
+        if (Math.abs(event.getFrom().getBlockX() - event.getTo().getBlockX()) < step
+            && Math.abs(event.getFrom().getBlockY() - event.getTo().getBlockY()) < step
+            && Math.abs(event.getFrom().getBlockZ() - event.getTo().getBlockZ()) < step) {
+            return;
+        }
+
+        obfuscationService.syncNearbyExposedOres(event.getPlayer());
     }
 
     private void schedulePrime(Player player, Location center, long delayTicks) {
@@ -101,6 +133,12 @@ public final class OreveilPlayerListener implements Listener {
     private boolean crossesChunk(Location from, Location to) {
         return (from.getBlockX() >> 4) != (to.getBlockX() >> 4)
             || (from.getBlockZ() >> 4) != (to.getBlockZ() >> 4);
+    }
+
+    private boolean sameBlock(Location from, Location to) {
+        return from.getBlockX() == to.getBlockX()
+            && from.getBlockY() == to.getBlockY()
+            && from.getBlockZ() == to.getBlockZ();
     }
 
     private boolean primerHandlesChunkDelivery() {

@@ -48,7 +48,8 @@ public final class OreveilConfigLoader {
             revealAdjacentMaterials,
             revealTransparentMaterials,
             parseDimensionDefaults(config.getConfigurationSection("host-blocks.dimension-defaults")),
-            parseOreOverrides(config.getConfigurationSection("host-blocks.ore-overrides"))
+            parseOreOverrides(config.getConfigurationSection("host-blocks.ore-overrides")),
+            parseWorldGeneration(config.getConfigurationSection("world-generation"))
         );
 
         logger.info(
@@ -58,6 +59,8 @@ public final class OreveilConfigLoader {
                 + oreveilConfig.oreOverrides().size()
                 + ", transport="
                 + oreveilConfig.transportMode()
+                + ", managedWorld="
+                + oreveilConfig.worldGeneration().targetWorldName()
         );
 
         return oreveilConfig;
@@ -134,5 +137,62 @@ public final class OreveilConfigLoader {
             return null;
         }
         return material;
+    }
+
+    private OreveilWorldGenerationConfig parseWorldGeneration(ConfigurationSection section) {
+        if (section == null) {
+            return new OreveilWorldGenerationConfig(
+                false,
+                false,
+                "oreveil",
+                World.Environment.NORMAL,
+                true,
+                true,
+                null,
+                18,
+                8,
+                0.02D
+            );
+        }
+
+        String targetWorldName = section.getString("target-world", "oreveil");
+        if (targetWorldName == null || targetWorldName.isBlank()) {
+            targetWorldName = "oreveil";
+        }
+
+        World.Environment environment = World.Environment.NORMAL;
+        String rawEnvironment = section.getString("environment", "NORMAL");
+        if (rawEnvironment != null) {
+            try {
+                environment = World.Environment.valueOf(rawEnvironment.toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException ignored) {
+                logger.warning("Ignoring unknown world-generation environment '" + rawEnvironment + "'. Falling back to NORMAL.");
+            }
+        }
+
+        Object rawSeed = section.get("seed");
+        Long configuredSeed = null;
+        if (rawSeed instanceof Number number) {
+            configuredSeed = number.longValue();
+        } else if (rawSeed instanceof String text && !text.isBlank()) {
+            try {
+                configuredSeed = Long.parseLong(text);
+            } catch (NumberFormatException ignored) {
+                logger.warning("Ignoring invalid world-generation seed '" + text + "'.");
+            }
+        }
+
+        return new OreveilWorldGenerationConfig(
+            section.getBoolean("enabled", false),
+            section.getBoolean("experimental", false),
+            targetWorldName,
+            environment,
+            section.getBoolean("backup-on-regenerate", true),
+            section.getBoolean("generate-structures", true),
+            configuredSeed,
+            Math.max(0, section.getInt("ore-remix-attempts-per-chunk", 18)),
+            Math.max(0, section.getInt("terrain-adjustment-attempts-per-chunk", 8)),
+            Math.max(0.0D, Math.min(1.0D, section.getDouble("ruin-fragment-chance", 0.02D)))
+        );
     }
 }

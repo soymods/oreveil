@@ -5,11 +5,13 @@ import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.config.OreveilConfigLoader;
 import com.soymods.oreveil.exposure.ExposureService;
 import com.soymods.oreveil.listener.OreveilPlayerListener;
+import com.soymods.oreveil.listener.OreveilWorldGenerationListener;
 import com.soymods.oreveil.listener.OreveilWorldListener;
 import com.soymods.oreveil.obfuscation.NetworkObfuscationService;
 import com.soymods.oreveil.obfuscation.scan.ChunkObfuscationPrimer;
 import com.soymods.oreveil.obfuscation.transport.TransportMode;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
+import com.soymods.oreveil.world.OreveilWorldGenerationService;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -47,6 +49,7 @@ public final class OreveilPlugin extends JavaPlugin {
     private AuthoritativeWorldModel worldModel;
     private ExposureService exposureService;
     private NetworkObfuscationService obfuscationService;
+    private OreveilWorldGenerationService worldGenerationService;
 
     @Override
     public void onEnable() {
@@ -57,13 +60,20 @@ public final class OreveilPlugin extends JavaPlugin {
         this.worldModel = new AuthoritativeWorldModel(this, getLogger(), oreveilConfig);
         this.exposureService = new ExposureService(getLogger(), oreveilConfig);
         this.obfuscationService = new NetworkObfuscationService(this, getLogger(), oreveilConfig, worldModel, exposureService);
+        this.worldGenerationService = new OreveilWorldGenerationService(this, getLogger(), oreveilConfig);
+        this.worldGenerationService.setMutationSync(obfuscationService::resyncBlocks);
         ChunkObfuscationPrimer chunkPrimer = new ChunkObfuscationPrimer(exposureService, obfuscationService, worldModel);
 
         worldModel.start();
         exposureService.start();
+        worldGenerationService.start();
         obfuscationService.start();
         getServer().getPluginManager().registerEvents(new OreveilWorldListener(obfuscationService, exposureService, worldModel), this);
-        getServer().getPluginManager().registerEvents(new OreveilPlayerListener(this, chunkPrimer, this::oreveilConfig), this);
+        getServer().getPluginManager().registerEvents(new OreveilWorldGenerationListener(worldGenerationService), this);
+        getServer().getPluginManager().registerEvents(
+            new OreveilPlayerListener(this, chunkPrimer, obfuscationService, this::oreveilConfig),
+            this
+        );
         registerCommands();
 
         // Handle late enable: sync any players already online when the plugin is loaded
@@ -77,6 +87,9 @@ public final class OreveilPlugin extends JavaPlugin {
     public void onDisable() {
         if (obfuscationService != null) {
             obfuscationService.stop();
+        }
+        if (worldGenerationService != null) {
+            worldGenerationService.stop();
         }
         if (exposureService != null) {
             exposureService.stop();
@@ -96,6 +109,7 @@ public final class OreveilPlugin extends JavaPlugin {
         this.worldModel.reload(oreveilConfig);
         this.exposureService.reload(oreveilConfig);
         this.obfuscationService.reload(oreveilConfig);
+        this.worldGenerationService.reload(oreveilConfig);
 
         // Sync real ores (handles protect/unprotect toggling)
         this.obfuscationService.resyncAllPlayers(Set.copyOf(ORE_CANDIDATES));
@@ -117,6 +131,10 @@ public final class OreveilPlugin extends JavaPlugin {
 
     public NetworkObfuscationService obfuscationService() {
         return obfuscationService;
+    }
+
+    public OreveilWorldGenerationService worldGenerationService() {
+        return worldGenerationService;
     }
 
     public List<Material> candidateOreMaterials() {
@@ -157,6 +175,18 @@ public final class OreveilPlugin extends JavaPlugin {
 
     public OreveilConfig setTransportMode(TransportMode mode) {
         getConfig().set("transport.mode", mode.name());
+        saveConfig();
+        return reloadOreveilConfig();
+    }
+
+    public OreveilConfig setStringSetting(String path, String value) {
+        getConfig().set(path, value);
+        saveConfig();
+        return reloadOreveilConfig();
+    }
+
+    public OreveilConfig setNullableLongSetting(String path, Long value) {
+        getConfig().set(path, value);
         saveConfig();
         return reloadOreveilConfig();
     }

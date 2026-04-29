@@ -11,7 +11,7 @@ softdepend:
 commands:
   oreveil:
     description: Administrative tools for Oreveil configuration and inspection.
-    usage: /oreveil <help|status|inspect|ores|toggle|set|transport|reload>
+    usage: /oreveil <help|status|inspect|ores|toggle|set|transport|world|reload>
     permission: oreveil.admin
 permissions:
   oreveil.admin:

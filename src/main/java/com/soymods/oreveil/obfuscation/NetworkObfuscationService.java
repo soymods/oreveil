@@ -180,6 +180,34 @@ public final class NetworkObfuscationService {
         transport.syncBlockToPlayer(player, block, this::getClientVisibleMaterial);
     }
 
+    public void syncNearbyExposedOres(Player player) {
+        int radius = config.revealProximityBlocks();
+        if (radius <= 0) {
+            return;
+        }
+
+        World world = player.getWorld();
+        Location origin = player.getLocation();
+        int baseX = origin.getBlockX();
+        int baseY = origin.getBlockY();
+        int baseZ = origin.getBlockZ();
+
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dy = -radius; dy <= radius; dy++) {
+                for (int dz = -radius; dz <= radius; dz++) {
+                    Block block = world.getBlockAt(baseX + dx, baseY + dy, baseZ + dz);
+                    if (!exposureService.isProtectedOre(block.getType())) {
+                        continue;
+                    }
+                    if (!exposureService.isLegitimatelyExposed(block)) {
+                        continue;
+                    }
+                    transport.syncBlockToPlayer(player, block, this::getClientVisibleMaterial);
+                }
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Bulk resync (used after reload / ore toggle)
     // -------------------------------------------------------------------------

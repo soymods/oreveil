@@ -20,7 +20,8 @@ public record OreveilConfig(
     EnumSet<Material> revealAdjacentMaterials,
     EnumSet<Material> revealTransparentMaterials,
     EnumMap<World.Environment, Material> dimensionDefaults,
-    EnumMap<Material, Material> oreOverrides
+    EnumMap<Material, Material> oreOverrides,
+    OreveilWorldGenerationConfig worldGeneration
 ) {
     public Material resolveDimensionDefault(World.Environment environment) {
         return dimensionDefaults.getOrDefault(environment, Material.STONE);

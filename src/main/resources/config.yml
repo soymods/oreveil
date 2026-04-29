@@ -52,6 +52,18 @@ world-model:
   # Higher values increase the density of fake ore signals seen by X-ray users.
   salt-density: 64
 
+world-generation:
+  enabled: false
+  experimental: false
+  target-world: oreveil
+  environment: NORMAL
+  backup-on-regenerate: true
+  generate-structures: true
+  seed:
+  ore-remix-attempts-per-chunk: 28
+  terrain-adjustment-attempts-per-chunk: 0
+  ruin-fragment-chance: 0.0
+
 transport:
   mode: AUTO
 

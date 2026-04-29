@@ -2,19 +2,26 @@ package com.soymods.oreveil.command;
 
 import com.soymods.oreveil.bootstrap.OreveilPlugin;
 import com.soymods.oreveil.config.OreveilConfig;
+import com.soymods.oreveil.config.OreveilWorldGenerationConfig;
 import com.soymods.oreveil.exposure.ExposureService;
 import com.soymods.oreveil.obfuscation.transport.TransportMode;
+import com.soymods.oreveil.world.OreveilWorldGenerationService;
+import com.soymods.oreveil.world.OreveilWorldGenerationService.WorldRegenerationResult;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.Stream;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -61,6 +68,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             case "toggle" -> handleToggle(sender, label, args);
             case "set" -> handleSet(sender, label, args);
             case "transport" -> handleTransport(sender, label, args);
+            case "world" -> handleWorld(sender, label, args);
             default -> {
                 sendError(sender, "Unknown subcommand. Use /" + label + " help.");
                 yield true;
@@ -71,7 +79,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return filter(args[0], List.of("help", "reload", "inspect", "status", "ores", "ore", "toggle", "set", "transport"));
+            return filter(args[0], List.of("help", "reload", "inspect", "status", "ores", "ore", "toggle", "set", "transport", "world"));
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("ore")) {
             return filter(args[1], List.of("toggle"));
@@ -94,6 +102,30 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("transport")) {
             return filter(args[1], Arrays.stream(TransportMode.values()).map(Enum::name).toList());
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("world")) {
+            return filter(args[1], List.of("status", "target", "seed", "create", "regenerate", "delete", "tp", "default"));
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("world") && args[1].equalsIgnoreCase("seed")) {
+            return filter(args[2], List.of("random", "keep"));
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("world") && args[1].equalsIgnoreCase("tp")) {
+            return filter(args[2], teleportableWorldTargets());
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("world") && args[1].equalsIgnoreCase("delete")) {
+            return filter(args[2], deletableWorldTargets());
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("world") && args[1].equalsIgnoreCase("default")) {
+            return filter(args[2], defaultableWorldTargets());
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("world") && args[1].equalsIgnoreCase("regenerate")) {
+            return filter(args[2], List.of("confirm", "keep"));
+        }
+        if (args.length == 4 && args[0].equalsIgnoreCase("world") && args[1].equalsIgnoreCase("regenerate")) {
+            return filter(args[3], List.of("confirm"));
+        }
+        if (args.length == 4 && args[0].equalsIgnoreCase("world") && args[1].equalsIgnoreCase("delete")) {
+            return filter(args[3], List.of("confirm"));
         }
         return List.of();
     }
@@ -225,6 +257,12 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             sender,
             "World",
             WORLD,
+            toggleControl(ToggleSetting.WORLD_GENERATION_ENABLED, config.worldGeneration().enabled(), label)
+        );
+        sendMessage(
+            sender,
+            "World",
+            WORLD,
             toggleControl(ToggleSetting.OBFUSCATION_ENABLED, config.obfuscationEnabled(), label)
         );
         sendMessage(
@@ -239,7 +277,203 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             WORLD,
             numericControl(IntSetting.SALT_DENSITY, config.saltDensity(), label)
         );
+        sendMessage(
+            sender,
+            "World",
+            WORLD,
+            worldSummary(config.worldGeneration(), label)
+        );
         sendDivider(sender);
+        return true;
+    }
+
+    private boolean handleWorld(CommandSender sender, String label, String[] args) {
+        if (args.length == 1 || args[1].equalsIgnoreCase("status")) {
+            sendWorldStatus(sender, label);
+            return true;
+        }
+
+        if (args[1].equalsIgnoreCase("target")) {
+            if (args.length < 3) {
+                sendError(sender, "Use /" + label + " world target <name>.");
+                return true;
+            }
+            String target = args[2].trim();
+            if (target.isEmpty()) {
+                sendError(sender, "Target world name cannot be blank.");
+                return true;
+            }
+            plugin.setStringSetting("world-generation.target-world", target);
+            sendMessage(
+                sender,
+                "World",
+                WORLD,
+                Component.text("Managed world target is now ", BASE)
+                    .append(highlight(target, WORLD))
+                    .append(Component.text(".", BASE))
+            );
+            sendWorldStatus(sender, label);
+            return true;
+        }
+
+        if (args[1].equalsIgnoreCase("seed")) {
+            if (args.length < 3) {
+                sendError(sender, "Use /" + label + " world seed <random|keep|value>.");
+                return true;
+            }
+
+            if (args[2].equalsIgnoreCase("random")) {
+                plugin.setNullableLongSetting("world-generation.seed", null);
+                sendMessage(sender, "World", WORLD, Component.text("Managed world seed mode is now random.", BASE));
+                sendWorldStatus(sender, label);
+                return true;
+            }
+
+            if (args[2].equalsIgnoreCase("keep")) {
+                Long configuredSeed = plugin.oreveilConfig().worldGeneration().configuredSeed();
+                sendMessage(
+                    sender,
+                    "World",
+                    WORLD,
+                    Component.text("Managed world seed is ", BASE)
+                        .append(highlight(configuredSeed == null ? "random" : String.valueOf(configuredSeed), WORLD))
+                        .append(Component.text(".", BASE))
+                );
+                return true;
+            }
+
+            long seed;
+            try {
+                seed = Long.parseLong(args[2]);
+            } catch (NumberFormatException ignored) {
+                sendError(sender, args[2] + " is not a valid seed.");
+                return true;
+            }
+
+            plugin.setNullableLongSetting("world-generation.seed", seed);
+            sendMessage(
+                sender,
+                "World",
+                WORLD,
+                Component.text("Managed world seed is now ", BASE)
+                    .append(highlight(String.valueOf(seed), WORLD))
+                    .append(Component.text(".", BASE))
+            );
+            sendWorldStatus(sender, label);
+            return true;
+        }
+
+        if (args[1].equalsIgnoreCase("create")) {
+            Long seedOverride = args.length >= 3 ? parseSeedArg(sender, args[2]) : null;
+            if (args.length >= 3 && seedOverride == null && !args[2].equalsIgnoreCase("random")) {
+                return true;
+            }
+
+            runWorldOperation(
+                sender,
+                "Creating managed world",
+                listener -> plugin.worldGenerationService().createManagedWorldAsync(seedOverride, 3, listener)
+            );
+            return true;
+        }
+
+        if (args[1].equalsIgnoreCase("regenerate")) {
+            if (!lastArgIsConfirm(args)) {
+                sendError(sender, "Use /" + label + " world regenerate [seed] confirm.");
+                return true;
+            }
+
+            Long seedOverride = null;
+            if (args.length == 4) {
+                seedOverride = parseSeedArg(sender, args[2]);
+                if (seedOverride == null && !args[2].equalsIgnoreCase("random") && !args[2].equalsIgnoreCase("keep")) {
+                    return true;
+                }
+                if (args[2].equalsIgnoreCase("keep")) {
+                    seedOverride = plugin.oreveilConfig().worldGeneration().configuredSeed();
+                }
+            }
+
+            Long finalSeedOverride = seedOverride;
+            runWorldOperation(
+                sender,
+                "Regenerating managed world",
+                listener -> plugin.worldGenerationService().regenerateManagedWorldAsync(finalSeedOverride, 3, listener)
+            );
+            return true;
+        }
+
+        if (args[1].equalsIgnoreCase("delete")) {
+            if (args.length == 2) {
+                sendDeleteWorldPrompt(sender, label);
+                return true;
+            }
+
+            if (args.length == 3) {
+                sendDeleteConfirmation(sender, label, resolveWorldTarget(args[2]));
+                return true;
+            }
+
+            if (!args[3].equalsIgnoreCase("confirm")) {
+                sendError(sender, "Use /" + label + " world delete <name> confirm.");
+                return true;
+            }
+
+            String worldName = resolveWorldTarget(args[2]);
+            WorldRegenerationResult result = plugin.worldGenerationService().deleteWorld(worldName);
+            sendWorldResult(sender, result);
+            return true;
+        }
+
+        if (args[1].equalsIgnoreCase("default")) {
+            if (args.length < 3) {
+                sendMessage(
+                    sender,
+                    "World",
+                    WORLD,
+                    Component.text("Server default world: ", BASE)
+                        .append(highlight(plugin.worldGenerationService().currentDefaultWorldName(), WORLD))
+                        .append(Component.text(". Use /" + label + " world default <name> to change it for the next restart.", BASE))
+                );
+                return true;
+            }
+
+            String worldName = resolveWorldTarget(args[2]);
+            WorldRegenerationResult result = plugin.worldGenerationService().setDefaultWorld(worldName);
+            sendWorldResult(sender, result);
+            return true;
+        }
+
+        if (args[1].equalsIgnoreCase("tp")) {
+            if (!(sender instanceof Player player)) {
+                sendError(sender, "Only players can teleport to worlds.");
+                return true;
+            }
+            if (args.length < 3) {
+                sendError(sender, "Use /" + label + " world tp <name>.");
+                return true;
+            }
+
+            String worldName = resolveWorldTarget(args[2]);
+            World world = Bukkit.getWorld(worldName);
+            if (world == null) {
+                sendError(sender, "World " + worldName + " is not loaded.");
+                return true;
+            }
+
+            player.teleportAsync(world.getSpawnLocation());
+            sendMessage(
+                sender,
+                "World",
+                WORLD,
+                Component.text("Teleporting to ", BASE)
+                    .append(highlight(world.getName(), WORLD))
+                    .append(Component.text(".", BASE))
+            );
+            return true;
+        }
+
+        sendError(sender, "Unknown world subcommand. Use /" + label + " world status.");
         return true;
     }
 
@@ -402,7 +636,76 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " toggle <setting>", CONTROLS, "Toggles a boolean setting."));
         sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " set <setting> <value>", CONTROLS, "Sets a numeric setting."));
         sendMessage(sender, "Status", STATUS, commandLine("/" + label + " transport <mode>", STATUS, "Changes the active transport mode."));
+        sendMessage(sender, "World", WORLD, commandLine("/" + label + " world status", WORLD, "Shows the managed world panel."));
+        sendMessage(sender, "World", WORLD, commandLine("/" + label + " world tp <name>", WORLD, "Teleports you to a loaded world."));
+        sendMessage(sender, "World", WORLD, commandLine("/" + label + " world delete [name]", WORLD, "Picks a world and asks before deleting it."));
+        sendMessage(sender, "World", WORLD, commandLine("/" + label + " world default <name>", WORLD, "Sets the server default world for the next restart."));
         sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " reload", CONTROLS, "Reloads config and runtime state."));
+        sendDivider(sender);
+    }
+
+    private void sendWorldStatus(CommandSender sender, String label) {
+        OreveilWorldGenerationConfig worldGeneration = plugin.oreveilConfig().worldGeneration();
+        sendDivider(sender);
+        sendMessage(
+            sender,
+            "World",
+            WORLD,
+            Component.text("Managed target: ", BASE)
+                .append(highlight(worldGeneration.targetWorldName(), WORLD))
+                .append(Component.text("  Default: ", BASE))
+                .append(highlight(plugin.worldGenerationService().currentDefaultWorldName(), WORLD))
+                .append(Component.text("  Generation: ", BASE))
+                .append(highlight(onOff(worldGeneration.enabled()), worldGeneration.enabled() ? WORLD : MUTED))
+        );
+        sendMessage(
+            sender,
+            "World",
+            WORLD,
+            Component.text("Environment: ", BASE)
+                .append(highlight(worldGeneration.environment().name(), WORLD))
+                .append(Component.text("  Structures: ", BASE))
+                .append(highlight(onOff(worldGeneration.generateStructures()), worldGeneration.generateStructures() ? WORLD : MUTED))
+                .append(Component.text("  Experimental: ", BASE))
+                .append(highlight(onOff(worldGeneration.experimental()), worldGeneration.experimental() ? WORLD : MUTED))
+        );
+        sendMessage(
+            sender,
+            "World",
+            WORLD,
+            Component.text("Seed: ", BASE)
+                .append(highlight(worldGeneration.configuredSeed() == null ? "random" : String.valueOf(worldGeneration.configuredSeed()), WORLD))
+                .append(Component.text("  Backup: ", BASE))
+                .append(highlight(onOff(worldGeneration.backupOnRegenerate()), worldGeneration.backupOnRegenerate() ? WORLD : MUTED))
+        );
+        sendMessage(
+            sender,
+            "World",
+            WORLD,
+            Component.text("Custom world generation is currently treated as experimental.", BASE)
+        );
+        sendMessage(
+            sender,
+            "World",
+            WORLD,
+            Component.text("Actions: ", BASE)
+                .append(action("/" + label + " world create", "create", WORLD, "Create the managed world if it does not exist."))
+                .append(Component.text("  •  ", MUTED))
+                .append(action(
+                    "/" + label + " world regenerate confirm",
+                    "regenerate",
+                    WORLD,
+                    "Regenerate the managed world using the configured or random seed."
+                ))
+                .append(Component.text("  •  ", MUTED))
+                .append(action("/" + label + " world tp managed", "teleport", WORLD, "Teleport to the managed world if it is loaded."))
+                .append(Component.text("  •  ", MUTED))
+                .append(action("/" + label + " world delete managed", "delete", ERROR, "Pick and confirm deleting the managed world."))
+                .append(Component.text("  •  ", MUTED))
+                .append(action("/" + label + " world default managed", "set default", WORLD, "Use the managed world as the server default on the next restart."))
+                .append(Component.text("  •  ", MUTED))
+                .append(action("/" + label + " world seed random", "random seed", MUTED, "Switch the managed world back to random seeds."))
+        );
         sendDivider(sender);
     }
 
@@ -444,6 +747,111 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             ));
     }
 
+    private Component worldSummary(OreveilWorldGenerationConfig worldGeneration, String label) {
+        return Component.text("Managed world: ", BASE)
+            .append(highlight(worldGeneration.targetWorldName(), WORLD))
+            .append(Component.text("  Experimental: ", BASE))
+            .append(highlight(onOff(worldGeneration.experimental()), worldGeneration.experimental() ? WORLD : MUTED))
+            .append(Component.text("  ", BASE))
+            .append(action("/" + label + " world status", "open", WORLD, "Open the managed world panel."));
+    }
+
+    private void sendDeleteWorldPrompt(CommandSender sender, String label) {
+        List<String> worlds = deletableWorldTargets();
+        if (worlds.isEmpty()) {
+            sendError(sender, "There are no deletable worlds available.");
+            return;
+        }
+
+        sendDivider(sender);
+        sendMessage(sender, "World", WORLD, Component.text("Pick a world to delete.", BASE));
+        for (String worldName : worlds) {
+            sendMessage(
+                sender,
+                "World",
+                WORLD,
+                action(
+                    "/" + label + " world delete " + worldName,
+                    worldName,
+                    WORLD,
+                    "Select " + worldName + " and show the delete confirmation."
+                )
+            );
+        }
+        sendDivider(sender);
+    }
+
+    private void sendDeleteConfirmation(CommandSender sender, String label, String worldName) {
+        if (!deletableWorldTargets().stream().anyMatch(name -> name.equalsIgnoreCase(worldName))) {
+            sendError(sender, "World " + worldName + " is not available for deletion.");
+            return;
+        }
+
+        sendDivider(sender);
+        sendMessage(
+            sender,
+            "World",
+            WORLD,
+            Component.text("Delete ", BASE)
+                .append(highlight(worldName, ERROR))
+                .append(Component.text("? This removes the world folder.", BASE))
+        );
+        sendMessage(
+            sender,
+            "World",
+            WORLD,
+            action(
+                "/" + label + " world delete " + worldName + " confirm",
+                "confirm delete",
+                ERROR,
+                "Delete " + worldName + "."
+            ).append(Component.text("  •  ", MUTED))
+                .append(action("/" + label + " world delete", "pick another", WORLD, "Choose a different world."))
+        );
+        sendDivider(sender);
+    }
+
+    private void sendWorldResult(CommandSender sender, WorldRegenerationResult result) {
+        if (!result.success()) {
+            sendError(sender, result.message());
+            return;
+        }
+
+        sendMessage(
+            sender,
+            "World",
+            WORLD,
+            Component.text(result.message(), BASE)
+        );
+    }
+
+    private void runWorldOperation(
+        CommandSender sender,
+        String initialMessage,
+        java.util.function.Consumer<OreveilWorldGenerationService.WorldOperationListener> operation
+    ) {
+        WorldProgressFeedback feedback = new WorldProgressFeedback(sender);
+        feedback.stage(initialMessage + "...");
+        operation.accept(feedback);
+    }
+
+    private boolean lastArgIsConfirm(String[] args) {
+        return args.length >= 3 && args[args.length - 1].equalsIgnoreCase("confirm");
+    }
+
+    private Long parseSeedArg(CommandSender sender, String raw) {
+        if (raw.equalsIgnoreCase("random")) {
+            return null;
+        }
+
+        try {
+            return Long.parseLong(raw);
+        } catch (NumberFormatException ignored) {
+            sendError(sender, raw + " is not a valid seed.");
+            return null;
+        }
+    }
+
     private Component transportPicker(OreveilConfig config, String label) {
         Component row = Component.empty();
         TransportMode selected = TransportMode.fromConfig(config.transportMode());
@@ -467,6 +875,74 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         return Component.text(text, color)
             .clickEvent(ClickEvent.runCommand(command))
             .hoverEvent(HoverEvent.showText(Component.text(hover, BASE)));
+    }
+
+    private List<String> teleportableWorldTargets() {
+        List<String> names = new ArrayList<>();
+        for (World world : Bukkit.getWorlds()) {
+            names.add(world.getName());
+        }
+        String managedTarget = plugin.oreveilConfig().worldGeneration().targetWorldName();
+        if (Bukkit.getWorld(managedTarget) != null && !names.contains(managedTarget)) {
+            names.add(managedTarget);
+        }
+        names.sort(String::compareToIgnoreCase);
+        return names;
+    }
+
+    private List<String> deletableWorldTargets() {
+        List<String> names = new ArrayList<>();
+        String primaryWorld = Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().get(0).getName();
+
+        File[] children = Bukkit.getWorldContainer().listFiles(File::isDirectory);
+        if (children != null) {
+            Stream.of(children)
+                .map(File::getName)
+                .filter(name -> new File(Bukkit.getWorldContainer(), name + File.separator + "level.dat").exists())
+                .filter(name -> !name.contains("_backup_"))
+                .filter(name -> !name.equalsIgnoreCase("plugins"))
+                .filter(name -> primaryWorld == null || !name.equalsIgnoreCase(primaryWorld))
+                .forEach(names::add);
+        }
+
+        for (World world : Bukkit.getWorlds()) {
+            if (primaryWorld != null && world.getName().equalsIgnoreCase(primaryWorld)) {
+                continue;
+            }
+            if (!names.contains(world.getName())) {
+                names.add(world.getName());
+            }
+        }
+
+        names.sort(String::compareToIgnoreCase);
+        return names;
+    }
+
+    private List<String> defaultableWorldTargets() {
+        List<String> names = new ArrayList<>();
+        File[] children = Bukkit.getWorldContainer().listFiles(File::isDirectory);
+        if (children != null) {
+            Stream.of(children)
+                .map(File::getName)
+                .filter(name -> new File(Bukkit.getWorldContainer(), name + File.separator + "level.dat").exists())
+                .filter(name -> !name.contains("_backup_"))
+                .forEach(names::add);
+        }
+
+        for (World world : Bukkit.getWorlds()) {
+            if (!names.contains(world.getName())) {
+                names.add(world.getName());
+            }
+        }
+
+        names.sort(String::compareToIgnoreCase);
+        return names;
+    }
+
+    private String resolveWorldTarget(String raw) {
+        return raw.equalsIgnoreCase("managed")
+            ? plugin.oreveilConfig().worldGeneration().targetWorldName()
+            : raw;
     }
 
     private List<String> filter(String prefix, List<String> values) {
@@ -508,6 +984,42 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         sendMessage(sender, "Error", ERROR, Component.text(message, BASE));
     }
 
+    private final class WorldProgressFeedback implements OreveilWorldGenerationService.WorldOperationListener {
+        private final CommandSender sender;
+
+        private WorldProgressFeedback(CommandSender sender) {
+            this.sender = sender;
+        }
+
+        @Override
+        public void onStage(String message) {
+            stage(message);
+        }
+
+        @Override
+        public void onProgress(int completed, int total) {
+            if (completed == 1 || completed == total || completed % Math.max(1, total / 4) == 0) {
+                sendMessage(
+                    sender,
+                    "World",
+                    WORLD,
+                    Component.text("Spawn area progress: ", BASE)
+                        .append(highlight(completed + "/" + total, WORLD))
+                        .append(Component.text(".", BASE))
+                );
+            }
+        }
+
+        @Override
+        public void onComplete(WorldRegenerationResult result) {
+            sendWorldResult(sender, result);
+        }
+
+        private void stage(String message) {
+            sendMessage(sender, "World", WORLD, Component.text(message, BASE));
+        }
+    }
+
     private enum ToggleSetting {
         OBFUSCATION_ENABLED("obfuscation", "obfuscation.enabled", "Obfuscation", "World", WORLD) {
             @Override
@@ -537,6 +1049,12 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             @Override
             boolean read(OreveilConfig config) {
                 return config.saltedDistributionEnabled();
+            }
+        },
+        WORLD_GENERATION_ENABLED("world_generation", "world-generation.enabled", "World Generation", "World", WORLD) {
+            @Override
+            boolean read(OreveilConfig config) {
+                return config.worldGeneration().enabled();
             }
         };
 
@@ -609,6 +1127,18 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             @Override
             List<String> suggestions() {
                 return List.of("32", "64", "96");
+            }
+        },
+        ORE_REMIX_ATTEMPTS("ore_remix_attempts", "world-generation.ore-remix-attempts-per-chunk", "Ore Remix Attempts", "World", WORLD, 0, 128, 4) {
+            @Override
+            List<String> suggestions() {
+                return List.of("12", "18", "24");
+            }
+        },
+        TERRAIN_TWEAK_ATTEMPTS("terrain_tweak_attempts", "world-generation.terrain-adjustment-attempts-per-chunk", "Terrain Tweak Attempts", "World", WORLD, 0, 64, 2) {
+            @Override
+            List<String> suggestions() {
+                return List.of("4", "8", "12");
             }
         };
 
