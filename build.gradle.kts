@@ -22,6 +22,7 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:${property("paper_api_version")}")
+    compileOnly("net.dmulloy2:ProtocolLib:5.4.0")
 }
 
 tasks.processResources {

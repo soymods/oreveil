@@ -5,7 +5,6 @@
 [![Minecraft](https://img.shields.io/badge/Minecraft-1.21.4-00AA00?style=for-the-badge&logo=minecraft)](https://minecraft.net)
 [![Paper](https://img.shields.io/badge/Paper-Server%20Plugin-FFFFFF?style=for-the-badge&logo=papermc&logoColor=black)](https://papermc.io)
 [![Java](https://img.shields.io/badge/Java-21+-FF6B6B?style=for-the-badge&logo=openjdk)](https://openjdk.org)
-[![Status](https://img.shields.io/badge/Status-Scaffold%20Phase-4C8EDA?style=for-the-badge)](#development)
 
 Deterministic server-side ore obfuscation and seed-resilient world integrity for Minecraft servers.
 
@@ -39,6 +38,33 @@ Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server
 - Support salted or non-vanilla ore placement strategies that do not derive from the public world seed.
 - Reduce the value of seed-cracking pipelines and pathing heuristics.
 
+## Feature Overview
+
+### Per-Player Obfuscation
+
+- Replace hidden ores with believable host blocks on a per-player basis.
+- Keep legitimate exposed ores visible without globally revealing underground data.
+- Support different host material behavior across the Overworld, Nether, and End.
+
+### Configurable Reveal Logic
+
+- Define exactly which ore blocks are protected.
+- Control what counts as exposure, including air, fluids, transparent blocks, and non-occluding neighbors.
+- Reload rules in-game without forcing server owners to hand-edit config for every change.
+
+### Live World Synchronization
+
+- React to mining, explosions, fluids, pistons, placement, teleportation, and player movement.
+- Keep the client view aligned with current reveal state as the world changes.
+- Prime newly viewed areas so players do not gain value from stale underground information.
+
+### Packet-Aware Transport
+
+- Rewrite outbound block update traffic on a per-player basis.
+- Support ProtocolLib-backed transport when available, with a fallback sync path for compatibility.
+- Preserve a clean transport boundary for deeper packet integrations.
+- Keep direct initial chunk rewrite behind an explicit experimental toggle.
+
 ## Threat Model
 
 Oreveil is intended to neutralize or materially weaken:
@@ -51,22 +77,19 @@ Oreveil is intended to neutralize or materially weaken:
 
 The goal is to reduce adversarial clients back to standard survival constraints rather than trying to detect every cheat directly.
 
-## Project Status
+## Administration
 
-This repository is currently in scaffold phase.
+Oreveil is designed to be manageable both from configuration files and in-game administration commands.
 
-The current codebase includes:
+- Use config-driven policies for protected ores, exposure rules, host block mapping, and transport behavior.
+- Use `/oreveil reload` to apply rule changes without restarting the server.
+- Use `/oreveil inspect` to inspect how a targeted block is currently classified and presented to the client.
 
-- a Gradle-based Paper plugin setup
-- plugin metadata and build workflow wiring
-- placeholder services for authoritative world state, exposure control, and packet obfuscation
-- initial configuration and documentation structure
+## Compatibility
 
-## Planned Architecture
-
-- `AuthoritativeWorldModel`: owns hidden ore state and future persistence/distribution hooks
-- `ExposureService`: decides when a block is legitimately visible
-- `NetworkObfuscationService`: handles packet rewrite entrypoints and per-player visible state
+- Built for Paper-based servers targeting Minecraft `1.21.4`.
+- Requires Java `21+`.
+- Integrates with ProtocolLib when installed.
 
 ## Development
 
@@ -86,6 +109,7 @@ Artifacts are written to `build/libs/`.
 - `src/main/java/com/soymods/oreveil/world/`: server-authoritative world model
 - `src/main/java/com/soymods/oreveil/exposure/`: reveal and exposure logic
 - `src/main/java/com/soymods/oreveil/obfuscation/`: packet rewrite pipeline
+- `src/main/java/com/soymods/oreveil/listener/`: world and player event synchronization
 - `src/main/resources/`: plugin metadata and configuration
 
 ## Version Information
@@ -98,6 +122,5 @@ Artifacts are written to `build/libs/`.
 
 ## Notes
 
-- This scaffold currently targets Paper API `1.21.4-R0.1-SNAPSHOT`.
-- Packet interception internals are not implemented yet.
-- The current classes are intentionally minimal and exist to establish the plugin boundaries cleanly.
+- Oreveil targets Paper API `1.21.4-R0.1-SNAPSHOT`.
+- ProtocolLib transport is used automatically when available, depending on `transport.mode`.

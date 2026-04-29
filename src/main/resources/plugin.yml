@@ -6,3 +6,14 @@ description: Deterministic server-side ore obfuscation with exposure-gated revea
 author: soymods
 load: STARTUP
 website: https://github.com/soymods/oreveil
+softdepend:
+  - ProtocolLib
+commands:
+  oreveil:
+    description: Administrative tools for Oreveil configuration and inspection.
+    usage: /oreveil <reload|inspect>
+    permission: oreveil.admin
+permissions:
+  oreveil.admin:
+    description: Allows management and inspection of Oreveil.
+    default: op
