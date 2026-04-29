@@ -8,6 +8,7 @@ import com.soymods.oreveil.listener.OreveilPlayerListener;
 import com.soymods.oreveil.listener.OreveilWorldListener;
 import com.soymods.oreveil.obfuscation.NetworkObfuscationService;
 import com.soymods.oreveil.obfuscation.scan.ChunkObfuscationPrimer;
+import com.soymods.oreveil.obfuscation.transport.TransportMode;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -134,6 +135,30 @@ public final class OreveilPlugin extends JavaPlugin {
         getConfig().set("protected-ores", ores);
         saveConfig();
         reloadOreveilConfig();
+    }
+
+    public OreveilConfig toggleBooleanSetting(String path) {
+        getConfig().set(path, !getConfig().getBoolean(path, false));
+        saveConfig();
+        return reloadOreveilConfig();
+    }
+
+    public OreveilConfig setBooleanSetting(String path, boolean value) {
+        getConfig().set(path, value);
+        saveConfig();
+        return reloadOreveilConfig();
+    }
+
+    public OreveilConfig setIntegerSetting(String path, int value) {
+        getConfig().set(path, value);
+        saveConfig();
+        return reloadOreveilConfig();
+    }
+
+    public OreveilConfig setTransportMode(TransportMode mode) {
+        getConfig().set("transport.mode", mode.name());
+        saveConfig();
+        return reloadOreveilConfig();
     }
 
     private void registerCommands() {

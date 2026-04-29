@@ -13,17 +13,14 @@ public record OreveilConfig(
     int revealProximityBlocks,
     int liveSyncRadiusBlocks,
     int initialSyncChunkRadius,
-    boolean experimentalChunkRewrite,
     boolean saltedDistributionEnabled,
     int saltDensity,
-    String worldModelMode,
     String transportMode,
     EnumSet<Material> protectedOres,
     EnumSet<Material> revealAdjacentMaterials,
     EnumSet<Material> revealTransparentMaterials,
     EnumMap<World.Environment, Material> dimensionDefaults,
-    EnumMap<Material, Material> oreOverrides,
-    boolean verboseLogging
+    EnumMap<Material, Material> oreOverrides
 ) {
     public Material resolveDimensionDefault(World.Environment environment) {
         return dimensionDefaults.getOrDefault(environment, Material.STONE);

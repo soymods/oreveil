@@ -7,13 +7,9 @@ import com.comphenix.protocol.events.ListenerPriority;
 import com.comphenix.protocol.events.PacketAdapter;
 import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.reflect.FieldAccessException;
 import com.comphenix.protocol.wrappers.BlockPosition;
-import com.comphenix.protocol.wrappers.MultiBlockChangeInfo;
 import com.comphenix.protocol.wrappers.WrappedBlockData;
-import com.comphenix.protocol.wrappers.WrappedLevelChunkData;
 import com.soymods.oreveil.config.OreveilConfig;
-import com.soymods.oreveil.obfuscation.chunk.ChunkPacketTransformer;
 import java.util.function.BiFunction;
 import java.util.logging.Logger;
 import org.bukkit.Bukkit;
@@ -25,26 +21,22 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 /**
- * Placeholder for the real packet-backed transport.
- * The adapter boundary is in place so ProtocolLib interception can be added
- * without changing the rest of Oreveil's visibility model.
+ * ProtocolLib-backed transport that rewrites direct block updates and primes
+ * delivered chunks with per-player correction after send.
  */
 public final class ProtocolLibTransport implements ObfuscationTransport {
     private final BlockUpdateSyncTransport fallback;
     private final Plugin plugin;
     private final Logger logger;
-    private final ChunkPacketTransformer chunkPacketTransformer;
     private ProtocolManager protocolManager;
     private OreveilConfig config;
     private BiFunction<Block, Player, Material> materialResolver;
     private PacketAdapter packetAdapter;
-    private boolean loggedUnsupportedMultiBlockChange;
 
     public ProtocolLibTransport(Plugin plugin, Logger logger) {
         this.plugin = plugin;
         this.fallback = new BlockUpdateSyncTransport(plugin, logger);
         this.logger = logger;
-        this.chunkPacketTransformer = new ChunkPacketTransformer(logger);
     }
 
     @Override
@@ -54,12 +46,7 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
         this.protocolManager = ProtocolLibrary.getProtocolManager();
         fallback.start(config, materialResolver);
         registerPacketListener();
-        logger.info(
-            "ProtocolLib transport selected. Rewriting outbound block updates. "
-                + (config.experimentalChunkRewrite()
-                    ? "Experimental chunk rewrite is enabled."
-                    : "Initial chunk rewrite is disabled; using post-send priming for chunk delivery.")
-        );
+        logger.info("ProtocolLib transport selected. Rewriting outbound block updates and priming chunk delivery.");
     }
 
     @Override
@@ -107,7 +94,6 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
             plugin,
             ListenerPriority.NORMAL,
             PacketType.Play.Server.BLOCK_CHANGE,
-            PacketType.Play.Server.MULTI_BLOCK_CHANGE,
             PacketType.Play.Server.MAP_CHUNK
         ) {
             @Override
@@ -119,11 +105,6 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
                 PacketType packetType = event.getPacketType();
                 if (packetType == PacketType.Play.Server.BLOCK_CHANGE) {
                     rewriteBlockChange(event);
-                    return;
-                }
-
-                if (packetType == PacketType.Play.Server.MULTI_BLOCK_CHANGE) {
-                    rewriteMultiBlockChange(event);
                     return;
                 }
 
@@ -152,78 +133,8 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
         packet.getBlockData().write(0, WrappedBlockData.createData(visibleMaterial));
     }
 
-    private void rewriteMultiBlockChange(PacketEvent event) {
-        PacketContainer packet = event.getPacket();
-        if (packet.getMultiBlockChangeInfoArrays().size() == 0) {
-            logUnsupportedMultiBlockChangeOnce();
-            return;
-        }
-
-        MultiBlockChangeInfo[] changes;
-        try {
-            changes = packet.getMultiBlockChangeInfoArrays().read(0);
-        } catch (FieldAccessException exception) {
-            logUnsupportedMultiBlockChangeOnce();
-            return;
-        }
-        if (changes == null || changes.length == 0) {
-            return;
-        }
-
-        Player player = event.getPlayer();
-        World world = player.getWorld();
-        for (MultiBlockChangeInfo change : changes) {
-            Block block = world.getBlockAt(change.getLocation(world));
-            Material visibleMaterial = materialResolver.apply(block, player);
-            change.setData(WrappedBlockData.createData(visibleMaterial));
-        }
-        packet.getMultiBlockChangeInfoArrays().write(0, changes);
-    }
-
-    private void logUnsupportedMultiBlockChangeOnce() {
-        if (loggedUnsupportedMultiBlockChange) {
-            return;
-        }
-
-        loggedUnsupportedMultiBlockChange = true;
-        logger.warning(
-            "Skipping an unsupported MULTI_BLOCK_CHANGE packet layout on this server build. "
-                + "Oreveil will continue using BLOCK_CHANGE rewriting and fallback sync for those updates."
-        );
-    }
-
     private void handleChunkPacket(PacketEvent event) {
-        if (config.experimentalChunkRewrite()) {
-            rewriteChunkPacket(event);
-            return;
-        }
-
         primeChunkAfterPacket(event);
-    }
-
-    private void rewriteChunkPacket(PacketEvent event) {
-        PacketContainer packet = event.getPacket();
-        if (packet.getIntegers().size() < 2 || packet.getLevelChunkData().size() == 0) {
-            return;
-        }
-
-        int chunkX = packet.getIntegers().read(0);
-        int chunkZ = packet.getIntegers().read(1);
-
-        Player player = event.getPlayer();
-        World world = player.getWorld();
-        if (!world.isChunkLoaded(chunkX, chunkZ)) {
-            return;
-        }
-
-        WrappedLevelChunkData.ChunkData chunkData = packet.getLevelChunkData().read(0);
-        // Use a player-bound resolver for the chunk rewrite so proximity rules are respected
-        boolean rewritten = chunkPacketTransformer.rewriteChunkData(
-            world, chunkX, chunkZ, chunkData, block -> materialResolver.apply(block, player)
-        );
-        if (rewritten) {
-            packet.getLevelChunkData().write(0, chunkData);
-        }
     }
 
     private void primeChunkAfterPacket(PacketEvent event) {

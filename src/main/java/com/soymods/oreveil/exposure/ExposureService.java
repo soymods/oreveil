@@ -52,18 +52,36 @@ public final class ExposureService {
         return !describeExposure(block).isEmpty();
     }
 
+    public boolean hasExposureFace(Block block) {
+        return !describeExposureFaces(block).isEmpty();
+    }
+
+    public boolean hasExposureFaceAfterBreak(Block block, Block removedBlock) {
+        return !describeExposureFacesAfterBreak(block, removedBlock).isEmpty();
+    }
+
     public List<String> describeExposure(Block block) {
         if (!isProtectedOre(block.getType())) {
             return List.of();
         }
 
+        return describeExposureFaces(block);
+    }
+
+    public List<String> describeExposureFaces(Block block) {
+        return describeExposureFacesAfterBreak(block, null);
+    }
+
+    public List<String> describeExposureFacesAfterBreak(Block block, Block removedBlock) {
         List<String> reasons = new ArrayList<>();
         EnumSet<Material> revealAdjacent = config.revealAdjacentMaterials();
         EnumSet<Material> revealTransparent = config.revealTransparentMaterials();
 
         for (BlockFace face : CARDINAL_FACES) {
             Block neighbor = block.getRelative(face);
-            Material neighborType = neighbor.getType();
+            Material neighborType = removedBlock != null && sameBlock(neighbor, removedBlock)
+                ? Material.AIR
+                : neighbor.getType();
 
             if (revealAdjacent.contains(neighborType)) {
                 reasons.add(face.name() + " adjacent to " + neighborType);
@@ -81,5 +99,12 @@ public final class ExposureService {
         }
 
         return reasons;
+    }
+
+    private static boolean sameBlock(Block left, Block right) {
+        return left.getWorld().equals(right.getWorld())
+            && left.getX() == right.getX()
+            && left.getY() == right.getY()
+            && left.getZ() == right.getZ();
     }
 }

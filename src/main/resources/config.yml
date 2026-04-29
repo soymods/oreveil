@@ -9,7 +9,6 @@ obfuscation:
   reveal-proximity-blocks: 6
   live-sync-radius-blocks: 64
   initial-sync-chunk-radius: 0
-  experimental-chunk-rewrite: false
 
 protected-ores:
   - COAL_ORE
@@ -48,11 +47,10 @@ exposure:
     - BLUE_ICE
 
 world-model:
-  salted-distribution: true
+  salted-distribution: false
   # Number of salt block placement attempts per chunk.
   # Higher values increase the density of fake ore signals seen by X-ray users.
   salt-density: 64
-  mode: VANILLA_ORES
 
 transport:
   mode: AUTO
@@ -74,6 +72,3 @@ host-blocks:
     ANCIENT_DEBRIS: NETHERRACK
     NETHER_GOLD_ORE: NETHERRACK
     NETHER_QUARTZ_ORE: NETHERRACK
-
-debug:
-  verbose-logging: false

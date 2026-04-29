@@ -41,17 +41,14 @@ public final class OreveilConfigLoader {
             Math.max(0, config.getInt("obfuscation.reveal-proximity-blocks", 6)),
             Math.max(16, config.getInt("obfuscation.live-sync-radius-blocks", 64)),
             Math.max(0, config.getInt("obfuscation.initial-sync-chunk-radius", 0)),
-            config.getBoolean("obfuscation.experimental-chunk-rewrite", false),
-            config.getBoolean("world-model.salted-distribution", true),
+            config.getBoolean("world-model.salted-distribution", false),
             Math.max(1, config.getInt("world-model.salt-density", 64)),
-            config.getString("world-model.mode", "VANILLA_ORES"),
             config.getString("transport.mode", "BLOCK_UPDATE_SYNC"),
             protectedOres,
             revealAdjacentMaterials,
             revealTransparentMaterials,
             parseDimensionDefaults(config.getConfigurationSection("host-blocks.dimension-defaults")),
-            parseOreOverrides(config.getConfigurationSection("host-blocks.ore-overrides")),
-            config.getBoolean("debug.verbose-logging", false)
+            parseOreOverrides(config.getConfigurationSection("host-blocks.ore-overrides"))
         );
 
         logger.info(
@@ -59,12 +56,8 @@ public final class OreveilConfigLoader {
                 + oreveilConfig.protectedOres().size()
                 + ", hostOverrides="
                 + oreveilConfig.oreOverrides().size()
-                + ", mode="
-                + oreveilConfig.worldModelMode()
                 + ", transport="
                 + oreveilConfig.transportMode()
-                + ", experimentalChunkRewrite="
-                + oreveilConfig.experimentalChunkRewrite()
         );
 
         return oreveilConfig;

@@ -17,6 +17,6 @@ This rule set keeps reveal semantics explicit and config-driven while leaving ro
 
 ## ProtocolLib Path
 
-- When ProtocolLib is present and `transport.mode` resolves to `AUTO` or `PROTOCOLLIB`, Oreveil now rewrites outbound `BLOCK_CHANGE` and `MULTI_BLOCK_CHANGE` packets per player.
-- By default, outbound chunk packets are not structurally rewritten. Oreveil primes the affected chunk for that player immediately after the chunk packet is sent so hidden ores are corrected to their host blocks as soon as possible.
-- `obfuscation.experimental-chunk-rewrite` exists for development testing, but it should be treated as unstable until validated across real worlds and packet edge cases.
+- When ProtocolLib is present and `transport.mode` resolves to `AUTO` or `PROTOCOLLIB`, Oreveil rewrites outbound `BLOCK_CHANGE` packets per player.
+- Outbound chunk packets are followed by a targeted prime pass for that player so hidden ores are corrected to their host blocks immediately after chunk delivery.
+- Oreveil does not currently rewrite chunk packet buffers directly. The stable production path is packet-aware block rewriting plus post-send chunk priming.

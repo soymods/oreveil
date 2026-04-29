@@ -15,6 +15,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
@@ -90,6 +91,9 @@ public final class NetworkObfuscationService {
 
         Material saltMaterial = worldModel.getSaltMaterial(block);
         if (saltMaterial != null) {
+            if (config.revealOnExposure() && exposureService.hasExposureFace(block)) {
+                return block.getType();
+            }
             return saltMaterial;
         }
 
@@ -131,6 +135,31 @@ public final class NetworkObfuscationService {
         broadcastToNearbyPlayers(block);
     }
 
+    public void syncAfterBreak(Block removedBlock) {
+        for (BlockFace face : BlockFace.values()) {
+            if (!face.isCartesian() || face == BlockFace.SELF) {
+                continue;
+            }
+
+            Block neighbor = removedBlock.getRelative(face);
+            Material saltMaterial = worldModel.getSaltMaterial(neighbor);
+            boolean protectedOre = worldModel.isProtectedOre(neighbor.getType());
+            if (!protectedOre && saltMaterial == null) {
+                continue;
+            }
+
+            World world = neighbor.getWorld();
+            Location loc = neighbor.getLocation();
+            double maxDistSq = (double) config.liveSyncRadiusBlocks() * config.liveSyncRadiusBlocks();
+            for (Player player : world.getPlayers()) {
+                if (player.getLocation().distanceSquared(loc) <= maxDistSq) {
+                    Material visible = getClientVisibleMaterialAfterBreak(neighbor, player, removedBlock, saltMaterial, protectedOre);
+                    transport.syncBlockToPlayer(player, neighbor, (b, p) -> visible);
+                }
+            }
+        }
+    }
+
     public void syncRevealBoundary(Block origin) {
         syncProtectedOres(BlockNeighborhoods.cardinalNeighborhood(origin, 2));
     }
@@ -141,7 +170,7 @@ public final class NetworkObfuscationService {
 
     public void syncProtectedOres(Iterable<Block> blocks) {
         for (Block block : blocks) {
-            if (exposureService.isProtectedOre(block.getType())) {
+            if (exposureService.isProtectedOre(block.getType()) || worldModel.getSaltMaterial(block) != null) {
                 broadcastToNearbyPlayers(block);
             }
         }
@@ -249,5 +278,37 @@ public final class NetworkObfuscationService {
                 transport.syncBlockToPlayer(player, block, this::getClientVisibleMaterial);
             }
         }
+    }
+
+    private Material getClientVisibleMaterialAfterBreak(
+        Block block,
+        Player viewer,
+        Block removedBlock,
+        Material saltMaterial,
+        boolean protectedOre
+    ) {
+        if (!config.obfuscationEnabled()) {
+            return block.getType();
+        }
+
+        boolean exposedAfterBreak = config.revealOnExposure()
+            && exposureService.hasExposureFaceAfterBreak(block, removedBlock);
+
+        if (saltMaterial != null) {
+            return exposedAfterBreak ? block.getType() : saltMaterial;
+        }
+
+        if (!protectedOre) {
+            return block.getType();
+        }
+
+        if (exposedAfterBreak) {
+            int radius = config.revealProximityBlocks();
+            if (radius <= 0 || (viewer != null && isWithinDistance(viewer, block, radius))) {
+                return block.getType();
+            }
+        }
+
+        return hostBlockResolver.resolve(block, config);
     }
 }

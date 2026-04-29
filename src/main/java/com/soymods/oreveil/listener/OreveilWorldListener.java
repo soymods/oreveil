@@ -57,6 +57,7 @@ public final class OreveilWorldListener implements Listener {
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     public void onBlockBreak(BlockBreakEvent event) {
         worldModel.invalidateBlock(event.getBlock());
+        obfuscationService.syncAfterBreak(event.getBlock());
         syncRevealBoundary(event.getBlock());
     }
 

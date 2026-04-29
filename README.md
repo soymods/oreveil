@@ -62,8 +62,8 @@ Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server
 
 - Rewrite outbound block update traffic on a per-player basis.
 - Support ProtocolLib-backed transport when available, with a fallback sync path for compatibility.
+- Prime newly delivered chunks so hidden ores are corrected as players receive terrain.
 - Preserve a clean transport boundary for deeper packet integrations.
-- Keep direct initial chunk rewrite behind an explicit experimental toggle.
 
 ## Threat Model
 
