@@ -1,0 +1,27 @@
+# Gradle caches and build outputs
+.gradle/
+.gradle-home/
+build/
+out/
+
+# Gradle wrapper runtime caches
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE / editor files
+*.iml
+.idea/
+.vscode/
+
+# Local test servers and plugin drop targets
+run/
+server/
+test-server/
+plugins/
+
+# OS files
+.DS_Store
+
+# Logs and crash reports
+logs/
+**/logs/
+*.log

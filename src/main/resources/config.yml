@@ -1,0 +1,12 @@
+# Initial scaffold configuration.
+# These values are placeholders until packet interception and distribution logic land.
+
+obfuscation:
+  enabled: true
+  reveal-on-exposure: true
+
+world-model:
+  salted-distribution: true
+
+debug:
+  verbose-logging: false

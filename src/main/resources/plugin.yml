@@ -1,0 +1,8 @@
+name: Oreveil
+version: ${version}
+main: com.soymods.oreveil.bootstrap.OreveilPlugin
+api-version: "1.21"
+description: Deterministic server-side ore obfuscation with exposure-gated reveal rules.
+author: soymods
+load: STARTUP
+website: https://github.com/soymods/oreveil
