@@ -15,6 +15,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Stream;
 import net.kyori.adventure.text.Component;
@@ -220,6 +221,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         boolean exposed = protectedOre && exposureService.isLegitimatelyExposed(block);
         Material visibleMaterial = plugin.obfuscationService().getClientVisibleMaterial(block, player);
         List<String> reasons = protectedOre ? new ArrayList<>(exposureService.describeExposure(block)) : List.of();
+        String classification = plugin.worldModel().describeBlockClassification(block);
 
         sendDivider(sender);
         sendMessage(
@@ -240,6 +242,13 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
                 .append(highlight(String.valueOf(protectedOre), protectedOre ? ORES : MUTED))
                 .append(Component.text("  Exposed: ", BASE))
                 .append(highlight(String.valueOf(exposed), exposed ? ORES : MUTED))
+        );
+        sendMessage(
+            sender,
+            "Status",
+            STATUS,
+            Component.text("Classification: ", BASE)
+                .append(highlight(classification, classification.startsWith("fake") ? ORES : STATUS))
         );
         sendMessage(
             sender,
@@ -422,6 +431,13 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
                 .append(highlight(String.valueOf(cacheStats.saltChunks()), ORES))
                 .append(Component.text("  salt blocks=", BASE))
                 .append(highlight(String.valueOf(cacheStats.saltBlocks()), ORES))
+        );
+        sendMessage(
+            sender,
+            "Ores",
+            ORES,
+            Component.text("Fake ore types: ", BASE)
+                .append(highlight(formatMaterialCounts(cacheStats.saltBlocksByType()), ORES))
         );
         sendDivider(sender);
         return true;
@@ -1622,6 +1638,17 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
 
     private String onOff(boolean value) {
         return value ? "on" : "off";
+    }
+
+    private String formatMaterialCounts(Map<Material, Integer> counts) {
+        if (counts.isEmpty()) {
+            return "none";
+        }
+        return counts.entrySet().stream()
+            .sorted(Map.Entry.comparingByKey(Comparator.comparing(Enum::name)))
+            .map(entry -> entry.getKey().name() + "=" + entry.getValue())
+            .reduce((left, right) -> left + ", " + right)
+            .orElse("none");
     }
 
     private void sendDivider(CommandSender sender) {

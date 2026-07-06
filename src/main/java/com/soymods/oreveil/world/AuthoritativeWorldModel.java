@@ -59,9 +59,34 @@ public final class AuthoritativeWorldModel {
         int protectedOreChunks,
         int protectedOreBlocks,
         int saltChunks,
-        int saltBlocks
+        int saltBlocks,
+        Map<Material, Integer> saltBlocksByType
     ) {
     }
+
+    private record SaltOreRule(Material material, World.Environment environment, int minY, int maxY, int weight) {}
+
+    private static final List<SaltOreRule> SALT_ORE_RULES = List.of(
+        new SaltOreRule(Material.COAL_ORE, World.Environment.NORMAL, 0, 192, 24),
+        new SaltOreRule(Material.DEEPSLATE_COAL_ORE, World.Environment.NORMAL, -64, 16, 10),
+        new SaltOreRule(Material.COPPER_ORE, World.Environment.NORMAL, -16, 112, 22),
+        new SaltOreRule(Material.DEEPSLATE_COPPER_ORE, World.Environment.NORMAL, -64, 16, 8),
+        new SaltOreRule(Material.IRON_ORE, World.Environment.NORMAL, -24, 96, 20),
+        new SaltOreRule(Material.DEEPSLATE_IRON_ORE, World.Environment.NORMAL, -64, 16, 14),
+        new SaltOreRule(Material.GOLD_ORE, World.Environment.NORMAL, -64, 32, 8),
+        new SaltOreRule(Material.DEEPSLATE_GOLD_ORE, World.Environment.NORMAL, -64, 16, 8),
+        new SaltOreRule(Material.REDSTONE_ORE, World.Environment.NORMAL, -64, 16, 7),
+        new SaltOreRule(Material.DEEPSLATE_REDSTONE_ORE, World.Environment.NORMAL, -64, 16, 10),
+        new SaltOreRule(Material.LAPIS_ORE, World.Environment.NORMAL, -64, 64, 5),
+        new SaltOreRule(Material.DEEPSLATE_LAPIS_ORE, World.Environment.NORMAL, -64, 16, 6),
+        new SaltOreRule(Material.DIAMOND_ORE, World.Environment.NORMAL, -64, 16, 2),
+        new SaltOreRule(Material.DEEPSLATE_DIAMOND_ORE, World.Environment.NORMAL, -64, 16, 3),
+        new SaltOreRule(Material.EMERALD_ORE, World.Environment.NORMAL, 16, 256, 1),
+        new SaltOreRule(Material.DEEPSLATE_EMERALD_ORE, World.Environment.NORMAL, -64, 16, 1),
+        new SaltOreRule(Material.NETHER_QUARTZ_ORE, World.Environment.NETHER, 10, 118, 28),
+        new SaltOreRule(Material.NETHER_GOLD_ORE, World.Environment.NETHER, 10, 118, 16),
+        new SaltOreRule(Material.ANCIENT_DEBRIS, World.Environment.NETHER, 8, 24, 1)
+    );
 
     public AuthoritativeWorldModel(Plugin plugin, Logger logger, OreveilConfig config) {
         this.plugin = plugin;
@@ -214,6 +239,10 @@ public final class AuthoritativeWorldModel {
     public String describeChunkRewriteState(Block block) {
         ChunkKey key = keyOf(block.getChunk());
         int packed = packLocal(block.getX() & 0xF, block.getY(), block.getZ() & 0xF);
+        Material saltMaterial = getSaltMaterial(block);
+        if (saltMaterial != null) {
+            return "fake salt: " + saltMaterial.name();
+        }
         Map<Integer, Material> ores = protectedOreCache.get(key);
         if (ores == null || !ores.containsKey(packed)) {
             return "not cached";
@@ -223,6 +252,24 @@ public final class AuthoritativeWorldModel {
         }
         Set<Integer> exposed = exposedProtectedOreCache.get(key);
         return exposed != null && exposed.contains(packed) ? "kept visible: exposed" : "hidden: buried";
+    }
+
+    public String describeBlockClassification(Block block) {
+        Material saltMaterial = getSaltMaterial(block);
+        if (saltMaterial != null) {
+            return "fake " + saltMaterial.name() + " over " + block.getType().name();
+        }
+
+        if (!isProtectedOre(block.getType())) {
+            return "normal " + block.getType().name();
+        }
+
+        ChunkKey key = keyOf(block.getChunk());
+        int packed = packLocal(block.getX() & 0xF, block.getY(), block.getZ() & 0xF);
+        Set<Integer> exposed = exposedProtectedOreCache.get(key);
+        return exposed != null && exposed.contains(packed)
+            ? "real exposed " + block.getType().name()
+            : "real buried " + block.getType().name();
     }
 
     public Map<Integer, Material> getSaltEntriesInChunk(UUID worldId, int chunkX, int chunkZ) {
@@ -256,15 +303,20 @@ public final class AuthoritativeWorldModel {
         }
 
         int cachedSaltBlocks = 0;
+        Map<Material, Integer> saltByType = new java.util.EnumMap<>(Material.class);
         for (Map<Integer, Material> salt : saltCache.values()) {
             cachedSaltBlocks += salt.size();
+            for (Material material : salt.values()) {
+                saltByType.merge(material, 1, Integer::sum);
+            }
         }
 
         return new CacheStats(
             protectedOreCache.size(),
             cachedProtectedOres,
             saltCache.size(),
-            cachedSaltBlocks
+            cachedSaltBlocks,
+            Map.copyOf(saltByType)
         );
     }
 
@@ -304,7 +356,7 @@ public final class AuthoritativeWorldModel {
         int maxY = world.getMaxHeight();
         World.Environment env = world.getEnvironment();
 
-        List<Material> candidates = saltOreCandidates(env);
+        List<SaltOreRule> candidates = saltOreCandidates(env);
         if (candidates.isEmpty()) {
             return;
         }
@@ -331,39 +383,45 @@ public final class AuthoritativeWorldModel {
             if (!SALT_HOSTS.contains(type)) {
                 continue;
             }
-            // Don't place salt on real protected ores
-            if (config.protectedOres().contains(type)) {
+            if (config.protectedOres().contains(type) || isExposed(block)) {
                 continue;
             }
 
-            Material saltOre = pickSaltOre(type, candidates, rng);
+            Material saltOre = pickSaltOre(type, y, candidates, rng);
             if (saltOre != null) {
                 salt.put(packLocal(lx, y, lz), saltOre);
             }
         }
     }
 
-    private List<Material> saltOreCandidates(World.Environment env) {
-        return config.protectedOres().stream()
-            .filter(m -> matchesDimension(m, env))
+    private List<SaltOreRule> saltOreCandidates(World.Environment env) {
+        return SALT_ORE_RULES.stream()
+            .filter(rule -> rule.environment() == env)
+            .filter(rule -> config.protectedOres().contains(rule.material()))
             .toList();
     }
 
-    private static boolean matchesDimension(Material ore, World.Environment env) {
-        String name = ore.name();
-        return switch (env) {
-            case NETHER -> name.startsWith("NETHER_") || name.equals("ANCIENT_DEBRIS");
-            case THE_END -> !name.startsWith("NETHER_") && !name.equals("ANCIENT_DEBRIS");
-            default -> !name.startsWith("NETHER_") && !name.equals("ANCIENT_DEBRIS");
-        };
-    }
-
-    private static Material pickSaltOre(Material host, List<Material> candidates, Random rng) {
-        List<Material> matching = candidates.stream()
-            .filter(m -> matchesHost(m, host))
+    private static Material pickSaltOre(Material host, int y, List<SaltOreRule> candidates, Random rng) {
+        List<SaltOreRule> matching = candidates.stream()
+            .filter(rule -> y >= rule.minY() && y <= rule.maxY())
+            .filter(rule -> matchesHost(rule.material(), host))
             .toList();
-        List<Material> pool = matching.isEmpty() ? candidates : matching;
-        return pool.isEmpty() ? null : pool.get(rng.nextInt(pool.size()));
+        if (matching.isEmpty()) {
+            return null;
+        }
+
+        int totalWeight = 0;
+        for (SaltOreRule rule : matching) {
+            totalWeight += rule.weight();
+        }
+        int roll = rng.nextInt(Math.max(1, totalWeight));
+        for (SaltOreRule rule : matching) {
+            roll -= rule.weight();
+            if (roll < 0) {
+                return rule.material();
+            }
+        }
+        return matching.getLast().material();
     }
 
     private static boolean matchesHost(Material ore, Material host) {
