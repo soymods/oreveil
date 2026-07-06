@@ -4,7 +4,9 @@ import com.soymods.oreveil.bootstrap.OreveilPlugin;
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.config.OreveilWorldGenerationConfig;
 import com.soymods.oreveil.exposure.ExposureService;
+import com.soymods.oreveil.obfuscation.ObfuscationMetrics;
 import com.soymods.oreveil.obfuscation.transport.TransportMode;
+import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import com.soymods.oreveil.world.OreveilWorldGenerationService;
 import com.soymods.oreveil.world.OreveilWorldGenerationService.WorldRegenerationResult;
 import java.io.File;
@@ -60,6 +62,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             case "reload" -> handleReload(sender);
             case "inspect" -> handleInspect(sender);
             case "status" -> handleStatus(sender, label);
+            case "diagnostics", "diag" -> handleDiagnostics(sender);
             case "ores" -> {
                 sendOreMenu(sender);
                 yield true;
@@ -79,7 +82,19 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return filter(args[0], List.of("help", "reload", "inspect", "status", "ores", "ore", "toggle", "set", "transport", "world"));
+            return filter(args[0], List.of(
+                "help",
+                "reload",
+                "inspect",
+                "status",
+                "diagnostics",
+                "ores",
+                "ore",
+                "toggle",
+                "set",
+                "transport",
+                "world"
+            ));
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("ore")) {
             return filter(args[1], List.of("toggle"));
@@ -162,7 +177,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         ExposureService exposureService = plugin.exposureService();
         boolean protectedOre = exposureService.isProtectedOre(block.getType());
         boolean exposed = protectedOre && exposureService.isLegitimatelyExposed(block);
-        Material visibleMaterial = plugin.obfuscationService().getClientVisibleMaterial(block);
+        Material visibleMaterial = plugin.obfuscationService().getClientVisibleMaterial(block, player);
         List<String> reasons = protectedOre ? new ArrayList<>(exposureService.describeExposure(block)) : List.of();
 
         sendDivider(sender);
@@ -282,6 +297,69 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             "World",
             WORLD,
             worldSummary(config.worldGeneration(), label)
+        );
+        sendDivider(sender);
+        return true;
+    }
+
+    private boolean handleDiagnostics(CommandSender sender) {
+        ObfuscationMetrics.Snapshot metrics = plugin.obfuscationService().metricsSnapshot();
+        AuthoritativeWorldModel.CacheStats cacheStats = plugin.cacheStats();
+
+        sendDivider(sender);
+        sendMessage(
+            sender,
+            "Status",
+            STATUS,
+            Component.text("Transport: ", BASE)
+                .append(highlight(plugin.obfuscationService().transportName(), STATUS))
+                .append(Component.text("  Chunk delivery handled: ", BASE))
+                .append(highlight(String.valueOf(plugin.obfuscationService().handlesChunkDelivery()), STATUS))
+        );
+        sendMessage(
+            sender,
+            "Status",
+            STATUS,
+            Component.text("Packet rewrites: block=", BASE)
+                .append(highlight(String.valueOf(metrics.blockChangePacketsRewritten()), STATUS))
+                .append(Component.text("  multi=", BASE))
+                .append(highlight(String.valueOf(metrics.multiBlockPacketsRewritten()), STATUS))
+                .append(Component.text("  multi entries=", BASE))
+                .append(highlight(String.valueOf(metrics.multiBlockEntriesRewritten()), STATUS))
+        );
+        sendMessage(
+            sender,
+            "Status",
+            STATUS,
+            Component.text("Chunk priming: packets=", BASE)
+                .append(highlight(String.valueOf(metrics.chunkPacketsPrimed()), STATUS))
+                .append(Component.text("  corrections=", BASE))
+                .append(highlight(String.valueOf(metrics.chunkPrimeCorrectionsSent()), STATUS))
+                .append(Component.text("  synthetic sends=", BASE))
+                .append(highlight(String.valueOf(metrics.syntheticBlockChangesSent()), STATUS))
+        );
+        sendMessage(
+            sender,
+            "Status",
+            metrics.multiBlockRewriteFailures() == 0 ? STATUS : ERROR,
+            Component.text("ProtocolLib rewrite failures: ", BASE)
+                .append(highlight(
+                    String.valueOf(metrics.multiBlockRewriteFailures()),
+                    metrics.multiBlockRewriteFailures() == 0 ? STATUS : ERROR
+                ))
+        );
+        sendMessage(
+            sender,
+            "Ores",
+            ORES,
+            Component.text("Cache: ore chunks=", BASE)
+                .append(highlight(String.valueOf(cacheStats.protectedOreChunks()), ORES))
+                .append(Component.text("  ore blocks=", BASE))
+                .append(highlight(String.valueOf(cacheStats.protectedOreBlocks()), ORES))
+                .append(Component.text("  salt chunks=", BASE))
+                .append(highlight(String.valueOf(cacheStats.saltChunks()), ORES))
+                .append(Component.text("  salt blocks=", BASE))
+                .append(highlight(String.valueOf(cacheStats.saltBlocks()), ORES))
         );
         sendDivider(sender);
         return true;
@@ -631,6 +709,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         sendDivider(sender);
         sendMessage(sender, "Oreveil", CONTROLS, Component.text("Command overview.", BASE));
         sendMessage(sender, "Status", STATUS, commandLine("/" + label + " status", STATUS, "Shows the live control panel."));
+        sendMessage(sender, "Status", STATUS, commandLine("/" + label + " diagnostics", STATUS, "Shows packet rewrite and cache counters."));
         sendMessage(sender, "Status", STATUS, commandLine("/" + label + " inspect", STATUS, "Inspects the targeted block."));
         sendMessage(sender, "Ores", ORES, commandLine("/" + label + " ores", ORES, "Opens the clickable ore selector."));
         sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " toggle <setting>", CONTROLS, "Toggles a boolean setting."));

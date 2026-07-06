@@ -15,6 +15,7 @@ public record OreveilConfig(
     int initialSyncChunkRadius,
     boolean saltedDistributionEnabled,
     int saltDensity,
+    long saltSecret,
     String transportMode,
     EnumSet<Material> protectedOres,
     EnumSet<Material> revealAdjacentMaterials,

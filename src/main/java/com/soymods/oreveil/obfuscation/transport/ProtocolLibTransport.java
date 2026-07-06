@@ -8,8 +8,11 @@ import com.comphenix.protocol.events.PacketAdapter;
 import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
 import com.comphenix.protocol.wrappers.BlockPosition;
+import com.comphenix.protocol.wrappers.MultiBlockChangeInfo;
 import com.comphenix.protocol.wrappers.WrappedBlockData;
 import com.soymods.oreveil.config.OreveilConfig;
+import com.soymods.oreveil.obfuscation.ObfuscationMetrics;
+import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import java.util.function.BiFunction;
 import java.util.logging.Logger;
 import org.bukkit.Bukkit;
@@ -28,15 +31,25 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
     private final BlockUpdateSyncTransport fallback;
     private final Plugin plugin;
     private final Logger logger;
+    private final AuthoritativeWorldModel worldModel;
+    private final ObfuscationMetrics metrics;
     private ProtocolManager protocolManager;
     private OreveilConfig config;
     private BiFunction<Block, Player, Material> materialResolver;
     private PacketAdapter packetAdapter;
+    private boolean warnedMultiBlockRewriteFailure;
 
-    public ProtocolLibTransport(Plugin plugin, Logger logger) {
+    public ProtocolLibTransport(
+        Plugin plugin,
+        Logger logger,
+        AuthoritativeWorldModel worldModel,
+        ObfuscationMetrics metrics
+    ) {
         this.plugin = plugin;
-        this.fallback = new BlockUpdateSyncTransport(plugin, logger);
+        this.fallback = new BlockUpdateSyncTransport(plugin, logger, metrics);
         this.logger = logger;
+        this.worldModel = worldModel;
+        this.metrics = metrics;
     }
 
     @Override
@@ -94,6 +107,7 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
             plugin,
             ListenerPriority.NORMAL,
             PacketType.Play.Server.BLOCK_CHANGE,
+            PacketType.Play.Server.MULTI_BLOCK_CHANGE,
             PacketType.Play.Server.MAP_CHUNK
         ) {
             @Override
@@ -105,6 +119,11 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
                 PacketType packetType = event.getPacketType();
                 if (packetType == PacketType.Play.Server.BLOCK_CHANGE) {
                     rewriteBlockChange(event);
+                    return;
+                }
+
+                if (packetType == PacketType.Play.Server.MULTI_BLOCK_CHANGE) {
+                    rewriteMultiBlockChange(event);
                     return;
                 }
 
@@ -131,6 +150,45 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
         Block block = player.getWorld().getBlockAt(position.getX(), position.getY(), position.getZ());
         Material visibleMaterial = materialResolver.apply(block, player);
         packet.getBlockData().write(0, WrappedBlockData.createData(visibleMaterial));
+        metrics.recordBlockChangePacketRewrite();
+    }
+
+    private void rewriteMultiBlockChange(PacketEvent event) {
+        PacketContainer packet = event.getPacket();
+        if (packet.getMultiBlockChangeInfoArrays().size() <= 0) {
+            return;
+        }
+
+        try {
+            MultiBlockChangeInfo[] changes = packet.getMultiBlockChangeInfoArrays().read(0);
+            if (changes == null || changes.length == 0) {
+                return;
+            }
+
+            Player player = event.getPlayer();
+            World world = player.getWorld();
+            int rewrittenEntries = 0;
+            for (MultiBlockChangeInfo change : changes) {
+                if (change == null) {
+                    continue;
+                }
+
+                Block block = change.getLocation(world).getBlock();
+                Material visibleMaterial = materialResolver.apply(block, player);
+                if (visibleMaterial != change.getData().getType()) {
+                    change.setData(WrappedBlockData.createData(visibleMaterial));
+                    rewrittenEntries++;
+                }
+            }
+            packet.getMultiBlockChangeInfoArrays().write(0, changes);
+            metrics.recordMultiBlockPacketRewrite(rewrittenEntries);
+        } catch (RuntimeException exception) {
+            metrics.recordMultiBlockRewriteFailure();
+            if (!warnedMultiBlockRewriteFailure) {
+                warnedMultiBlockRewriteFailure = true;
+                logger.warning("Could not rewrite a multi-block change packet: " + exception.getMessage());
+            }
+        }
     }
 
     private void handleChunkPacket(PacketEvent event) {
@@ -159,29 +217,24 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
 
             Chunk chunk = world.getChunkAt(chunkX, chunkZ);
             primeChunkToPlayer(player, chunk);
+            metrics.recordChunkPacketPrimed();
         });
     }
 
     private void primeChunkToPlayer(Player player, Chunk chunk) {
-        World world = chunk.getWorld();
-        int minY = world.getMinHeight();
-        int maxY = world.getMaxHeight();
-        int baseX = chunk.getX() << 4;
-        int baseZ = chunk.getZ() << 4;
+        for (Block block : worldModel.getProtectedOreBlocksInChunk(chunk)) {
+            Material visibleMaterial = materialResolver.apply(block, player);
+            if (visibleMaterial != block.getType()) {
+                fallback.syncBlockToPlayer(player, block, (b, p) -> visibleMaterial);
+                metrics.recordChunkPrimeCorrection();
+            }
+        }
 
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                for (int y = minY; y < maxY; y++) {
-                    Block block = world.getBlockAt(baseX + x, y, baseZ + z);
-                    if (block.getType().isAir()) {
-                        continue;
-                    }
-
-                    Material visibleMaterial = materialResolver.apply(block, player);
-                    if (visibleMaterial != block.getType()) {
-                        fallback.syncBlockToPlayer(player, block, (b, p) -> visibleMaterial);
-                    }
-                }
+        for (Block block : worldModel.getSaltBlocksInChunk(chunk)) {
+            Material visibleMaterial = materialResolver.apply(block, player);
+            if (visibleMaterial != block.getType()) {
+                fallback.syncBlockToPlayer(player, block, (b, p) -> visibleMaterial);
+                metrics.recordChunkPrimeCorrection();
             }
         }
     }

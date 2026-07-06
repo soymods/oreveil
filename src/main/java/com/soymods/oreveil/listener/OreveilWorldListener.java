@@ -12,25 +12,34 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.block.BlockFadeEvent;
+import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockFromToEvent;
+import org.bukkit.event.block.BlockGrowEvent;
 import org.bukkit.event.block.BlockPistonExtendEvent;
 import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.BlockSpreadEvent;
+import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
+import org.bukkit.plugin.Plugin;
 import com.soymods.oreveil.util.BlockNeighborhoods;
 
 public final class OreveilWorldListener implements Listener {
+    private final Plugin plugin;
     private final NetworkObfuscationService obfuscationService;
     private final ExposureService exposureService;
     private final AuthoritativeWorldModel worldModel;
 
     public OreveilWorldListener(
+        Plugin plugin,
         NetworkObfuscationService obfuscationService,
         ExposureService exposureService,
         AuthoritativeWorldModel worldModel
     ) {
+        this.plugin = plugin;
         this.obfuscationService = obfuscationService;
         this.exposureService = exposureService;
         this.worldModel = worldModel;
@@ -63,7 +72,7 @@ public final class OreveilWorldListener implements Listener {
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     public void onBlockPlace(BlockPlaceEvent event) {
-        worldModel.invalidateBlock(event.getBlockPlaced());
+        worldModel.refreshBlock(event.getBlockPlaced());
         syncRevealBoundary(event.getBlockPlaced());
     }
 
@@ -83,7 +92,38 @@ public final class OreveilWorldListener implements Listener {
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     public void onFluidFlow(BlockFromToEvent event) {
+        refreshNextTick(event.getToBlock());
         syncRevealBoundary(event.getToBlock());
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    public void onBlockForm(BlockFormEvent event) {
+        refreshNextTick(event.getBlock());
+        syncRevealBoundary(event.getBlock());
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    public void onBlockFade(BlockFadeEvent event) {
+        refreshNextTick(event.getBlock());
+        syncRevealBoundary(event.getBlock());
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    public void onBlockGrow(BlockGrowEvent event) {
+        refreshNextTick(event.getBlock());
+        syncRevealBoundary(event.getBlock());
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    public void onBlockSpread(BlockSpreadEvent event) {
+        refreshNextTick(event.getBlock());
+        syncRevealBoundary(event.getBlock());
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    public void onEntityChangeBlock(EntityChangeBlockEvent event) {
+        refreshNextTick(event.getBlock());
+        syncRevealBoundary(event.getBlock());
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
@@ -91,6 +131,10 @@ public final class OreveilWorldListener implements Listener {
         Set<Block> impacted = new LinkedHashSet<>();
         impacted.add(event.getBlock());
         impacted.addAll(event.getBlocks());
+        for (Block moved : event.getBlocks()) {
+            impacted.add(moved.getRelative(event.getDirection()));
+        }
+        refreshNextTick(impacted);
         syncRevealBoundaries(impacted);
     }
 
@@ -99,6 +143,11 @@ public final class OreveilWorldListener implements Listener {
         Set<Block> impacted = new LinkedHashSet<>();
         impacted.add(event.getBlock());
         impacted.addAll(event.getBlocks());
+        for (Block moved : event.getBlocks()) {
+            impacted.add(moved.getRelative(event.getDirection()));
+            impacted.add(moved.getRelative(event.getDirection().getOppositeFace()));
+        }
+        refreshNextTick(impacted);
         syncRevealBoundaries(impacted);
     }
 
@@ -117,5 +166,21 @@ public final class OreveilWorldListener implements Listener {
         for (Block block : changedBlocks) {
             obfuscationService.syncRevealBoundaryNextTick(block);
         }
+    }
+
+    private void refreshNextTick(Block block) {
+        plugin.getServer().getScheduler().runTask(plugin, () -> worldModel.refreshBlock(block));
+    }
+
+    private void refreshNextTick(Iterable<Block> blocks) {
+        Set<Block> snapshot = new LinkedHashSet<>();
+        for (Block block : blocks) {
+            snapshot.add(block);
+        }
+        if (snapshot.isEmpty()) {
+            return;
+        }
+
+        plugin.getServer().getScheduler().runTask(plugin, () -> snapshot.forEach(worldModel::refreshBlock));
     }
 }

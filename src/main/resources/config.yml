@@ -51,6 +51,9 @@ world-model:
   # Number of salt block placement attempts per chunk.
   # Higher values increase the density of fake ore signals seen by X-ray users.
   salt-density: 64
+  # Server-private salt for fake ore placement. Change this to a random long before
+  # enabling salted-distribution so fake ore signals are not derived from the public seed alone.
+  salt-secret: 0
 
 world-generation:
   enabled: false

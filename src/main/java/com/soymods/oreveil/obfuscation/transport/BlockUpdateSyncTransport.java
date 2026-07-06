@@ -1,6 +1,7 @@
 package com.soymods.oreveil.obfuscation.transport;
 
 import com.soymods.oreveil.config.OreveilConfig;
+import com.soymods.oreveil.obfuscation.ObfuscationMetrics;
 import java.util.function.BiFunction;
 import java.util.logging.Logger;
 import org.bukkit.Location;
@@ -18,11 +19,13 @@ import org.bukkit.plugin.Plugin;
 public final class BlockUpdateSyncTransport implements ObfuscationTransport {
     private final Plugin plugin;
     private final Logger logger;
+    private final ObfuscationMetrics metrics;
     private OreveilConfig config;
 
-    public BlockUpdateSyncTransport(Plugin plugin, Logger logger) {
+    public BlockUpdateSyncTransport(Plugin plugin, Logger logger, ObfuscationMetrics metrics) {
         this.plugin = plugin;
         this.logger = logger;
+        this.metrics = metrics;
     }
 
     @Override
@@ -66,6 +69,7 @@ public final class BlockUpdateSyncTransport implements ObfuscationTransport {
 
         Material visibleMaterial = materialResolver.apply(block, player);
         player.sendBlockChange(block.getLocation(), visibleMaterial.createBlockData());
+        metrics.recordSyntheticBlockChange();
     }
 
     @Override

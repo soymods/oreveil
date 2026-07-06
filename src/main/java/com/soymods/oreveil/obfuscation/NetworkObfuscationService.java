@@ -25,6 +25,7 @@ public final class NetworkObfuscationService {
     private final AuthoritativeWorldModel worldModel;
     private final ExposureService exposureService;
     private final HostBlockResolver hostBlockResolver;
+    private final ObfuscationMetrics metrics;
     private ObfuscationTransport transport;
     private final Plugin plugin;
 
@@ -41,7 +42,8 @@ public final class NetworkObfuscationService {
         this.worldModel = worldModel;
         this.exposureService = exposureService;
         this.hostBlockResolver = new HostBlockResolver();
-        this.transport = TransportFactory.create(plugin, logger, config);
+        this.metrics = new ObfuscationMetrics();
+        this.transport = TransportFactory.create(plugin, logger, config, worldModel, metrics);
     }
 
     public void start() {
@@ -67,7 +69,7 @@ public final class NetworkObfuscationService {
         this.config = config;
         if (transportChanged) {
             transport.stop();
-            transport = TransportFactory.create(plugin, logger, config);
+            transport = TransportFactory.create(plugin, logger, config, worldModel, metrics);
             transport.start(config, this::getClientVisibleMaterial);
         } else {
             transport.reload(config, this::getClientVisibleMaterial);
@@ -258,25 +260,16 @@ public final class NetworkObfuscationService {
                     if (!world.isChunkLoaded(cx, cz)) {
                         continue;
                     }
-                    resyncChunkForPlayer(player, world.getChunkAt(cx, cz), world, candidates);
+                    resyncChunkForPlayer(player, world.getChunkAt(cx, cz), candidates);
                 }
             }
         }
     }
 
-    private void resyncChunkForPlayer(Player player, Chunk chunk, World world, Set<Material> candidates) {
-        int minY = world.getMinHeight();
-        int maxY = world.getMaxHeight();
-        int baseX = chunk.getX() << 4;
-        int baseZ = chunk.getZ() << 4;
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                for (int y = minY; y < maxY; y++) {
-                    Block block = world.getBlockAt(baseX + x, y, baseZ + z);
-                    if (candidates.contains(block.getType())) {
-                        transport.syncBlockToPlayer(player, block, this::getClientVisibleMaterial);
-                    }
-                }
+    private void resyncChunkForPlayer(Player player, Chunk chunk, Set<Material> candidates) {
+        for (Block block : worldModel.getProtectedOreBlocksInChunk(chunk)) {
+            if (candidates.contains(block.getType())) {
+                transport.syncBlockToPlayer(player, block, this::getClientVisibleMaterial);
             }
         }
     }
@@ -291,6 +284,10 @@ public final class NetworkObfuscationService {
 
     public String transportName() {
         return transport.name();
+    }
+
+    public ObfuscationMetrics.Snapshot metricsSnapshot() {
+        return metrics.snapshot();
     }
 
     // -------------------------------------------------------------------------

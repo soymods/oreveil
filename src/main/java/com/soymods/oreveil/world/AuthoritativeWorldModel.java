@@ -4,9 +4,11 @@ import com.soymods.oreveil.config.OreveilConfig;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Logger;
 import org.bukkit.Chunk;
@@ -40,8 +42,17 @@ public final class AuthoritativeWorldModel {
 
     // Per-chunk salt state: chunkKey → (packed local block pos → fake ore material)
     private final Map<ChunkKey, Map<Integer, Material>> saltCache = new HashMap<>();
+    private final Map<ChunkKey, Set<Integer>> protectedOreCache = new HashMap<>();
 
     private record ChunkKey(UUID worldId, int x, int z) {}
+
+    public record CacheStats(
+        int protectedOreChunks,
+        int protectedOreBlocks,
+        int saltChunks,
+        int saltBlocks
+    ) {
+    }
 
     public AuthoritativeWorldModel(Plugin plugin, Logger logger, OreveilConfig config) {
         this.plugin = plugin;
@@ -50,28 +61,32 @@ public final class AuthoritativeWorldModel {
     }
 
     public void start() {
-        if (config.saltedDistributionEnabled()) {
-            int seeded = seedAllLoadedChunks();
-            logger.info("Authoritative world model initialized; seeded " + seeded + " already-loaded chunks.");
-        } else {
-            logger.info("Authoritative world model initialized (salted distribution disabled).");
-        }
+        int indexed = seedAllLoadedChunks();
+        logger.info(
+            "Authoritative world model initialized; indexed "
+                + indexed
+                + " already-loaded chunks"
+                + (config.saltedDistributionEnabled() ? " with salted distribution." : ".")
+        );
     }
 
     public void stop() {
         saltCache.clear();
+        protectedOreCache.clear();
         logger.info("Authoritative world model stopped.");
     }
 
     public void reload(OreveilConfig newConfig) {
         saltCache.clear();
+        protectedOreCache.clear();
         this.config = newConfig;
-        if (newConfig.saltedDistributionEnabled()) {
-            int seeded = seedAllLoadedChunks();
-            logger.info("Authoritative world model reloaded; seeded " + seeded + " chunks.");
-        } else {
-            logger.info("Authoritative world model reloaded (salted distribution disabled).");
-        }
+        int indexed = seedAllLoadedChunks();
+        logger.info(
+            "Authoritative world model reloaded; indexed "
+                + indexed
+                + " chunks"
+                + (newConfig.saltedDistributionEnabled() ? " with salted distribution." : ".")
+        );
     }
 
     public boolean isProtectedOre(Material material) {
@@ -83,20 +98,26 @@ public final class AuthoritativeWorldModel {
     // -------------------------------------------------------------------------
 
     public void populateChunk(Chunk chunk) {
-        if (!config.saltedDistributionEnabled()) {
-            return;
-        }
         ChunkKey key = keyOf(chunk);
-        if (saltCache.containsKey(key)) {
+        if (protectedOreCache.containsKey(key) && (!config.saltedDistributionEnabled() || saltCache.containsKey(key))) {
             return;
         }
+
+        protectedOreCache.put(key, scanProtectedOres(chunk));
+        if (!config.saltedDistributionEnabled()) {
+            saltCache.remove(key);
+            return;
+        }
+
         Map<Integer, Material> salt = new HashMap<>();
         generateSalt(chunk, salt);
         saltCache.put(key, salt);
     }
 
     public void evictChunk(Chunk chunk) {
-        saltCache.remove(keyOf(chunk));
+        ChunkKey key = keyOf(chunk);
+        saltCache.remove(key);
+        protectedOreCache.remove(key);
     }
 
     // -------------------------------------------------------------------------
@@ -129,6 +150,24 @@ public final class AuthoritativeWorldModel {
         return blocks;
     }
 
+    /** Returns cached protected ore positions in the given chunk. */
+    public List<Block> getProtectedOreBlocksInChunk(Chunk chunk) {
+        Set<Integer> ores = protectedOreCache.get(keyOf(chunk));
+        if (ores == null || ores.isEmpty()) {
+            return List.of();
+        }
+
+        World world = chunk.getWorld();
+        int baseX = chunk.getX() << 4;
+        int baseZ = chunk.getZ() << 4;
+        List<Block> blocks = new ArrayList<>(ores.size());
+        for (int localKey : ores) {
+            int[] loc = unpackLocal(localKey);
+            blocks.add(world.getBlockAt(baseX + loc[0], loc[1], baseZ + loc[2]));
+        }
+        return blocks;
+    }
+
     /** Returns all salt blocks across all currently cached chunks (used for pre-reload drain). */
     public List<Block> collectAllSaltBlocks() {
         List<Block> result = new ArrayList<>();
@@ -148,11 +187,44 @@ public final class AuthoritativeWorldModel {
         return result;
     }
 
-    /** Removes a block from the salt cache (called on block break/place so mined salt doesn't linger). */
+    public CacheStats cacheStats() {
+        int cachedProtectedOres = 0;
+        for (Set<Integer> ores : protectedOreCache.values()) {
+            cachedProtectedOres += ores.size();
+        }
+
+        int cachedSaltBlocks = 0;
+        for (Map<Integer, Material> salt : saltCache.values()) {
+            cachedSaltBlocks += salt.size();
+        }
+
+        return new CacheStats(
+            protectedOreCache.size(),
+            cachedProtectedOres,
+            saltCache.size(),
+            cachedSaltBlocks
+        );
+    }
+
+    /** Removes a block from all caches after the server removes it. */
     public void invalidateBlock(Block block) {
+        removeCachedBlock(block);
+    }
+
+    /** Updates cached state after a block has been placed or changed in-place. */
+    public void refreshBlock(Block block) {
+        ChunkKey key = keyOf(block.getChunk());
+        int packed = packLocal(block.getX() & 0xF, block.getY(), block.getZ() & 0xF);
         Map<Integer, Material> salt = saltCache.get(keyOf(block.getChunk()));
         if (salt != null) {
-            salt.remove(packLocal(block.getX() & 0xF, block.getY(), block.getZ() & 0xF));
+            salt.remove(packed);
+        }
+
+        Set<Integer> ores = protectedOreCache.computeIfAbsent(key, ignored -> new HashSet<>());
+        if (isProtectedOre(block.getType())) {
+            ores.add(packed);
+        } else {
+            ores.remove(packed);
         }
     }
 
@@ -171,10 +243,11 @@ public final class AuthoritativeWorldModel {
             return;
         }
 
-        // Deterministic seed derived from world seed + chunk coordinates
+        // Deterministic seed derived from world seed, chunk coordinates, and a server-private secret.
         long seed = world.getSeed()
             ^ ((long) chunk.getX() * 341873128712L)
-            ^ ((long) chunk.getZ() * 132897987541L);
+            ^ ((long) chunk.getZ() * 132897987541L)
+            ^ Long.rotateLeft(config.saltSecret(), 17);
         Random rng = new Random(seed);
 
         int baseX = chunk.getX() << 4;
@@ -254,6 +327,40 @@ public final class AuthoritativeWorldModel {
 
     private static ChunkKey keyOf(Chunk chunk) {
         return new ChunkKey(chunk.getWorld().getUID(), chunk.getX(), chunk.getZ());
+    }
+
+    private Set<Integer> scanProtectedOres(Chunk chunk) {
+        World world = chunk.getWorld();
+        int minY = world.getMinHeight();
+        int maxY = world.getMaxHeight();
+        int baseX = chunk.getX() << 4;
+        int baseZ = chunk.getZ() << 4;
+        Set<Integer> ores = new HashSet<>();
+
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                for (int y = minY; y < maxY; y++) {
+                    if (isProtectedOre(world.getBlockAt(baseX + x, y, baseZ + z).getType())) {
+                        ores.add(packLocal(x, y, z));
+                    }
+                }
+            }
+        }
+
+        return ores;
+    }
+
+    private void removeCachedBlock(Block block) {
+        ChunkKey key = keyOf(block.getChunk());
+        int packed = packLocal(block.getX() & 0xF, block.getY(), block.getZ() & 0xF);
+        Map<Integer, Material> salt = saltCache.get(key);
+        if (salt != null) {
+            salt.remove(packed);
+        }
+        Set<Integer> ores = protectedOreCache.get(key);
+        if (ores != null) {
+            ores.remove(packed);
+        }
     }
 
     // lx/lz: 0–15 (4 bits each), y offset by 2048 to handle negative heights

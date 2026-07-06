@@ -16,7 +16,7 @@ Created by `soymods`.
 
 Oreveil is a server-side Minecraft plugin that prevents x-ray and seed-assisted resource discovery by ensuring unrevealed ore data is never sent to the client in the first place.
 
-Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server authoritative and rewrites chunk or block data before it reaches players. Hidden ores are replaced with contextually valid host blocks such as stone, deepslate, or netherrack until normal gameplay legitimately exposes them.
+Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server authoritative and rewrites block updates before they reach players. Hidden ores are replaced with contextually valid host blocks such as stone, deepslate, or netherrack until normal gameplay legitimately exposes them. Chunk delivery is currently followed by targeted correction packets; direct chunk-buffer rewriting is the next major hardening step.
 
 ## Core Model
 
@@ -35,7 +35,7 @@ Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server
 ### Seed-Resilient Authority
 
 - Maintain a server-authoritative record of protected ore positions.
-- Support salted or non-vanilla ore placement strategies that do not derive from the public world seed.
+- Support salted or non-vanilla ore placement strategies using a server-private salt so fake ore signals do not derive from the public world seed alone.
 - Reduce the value of seed-cracking pipelines and pathing heuristics.
 
 ## Feature Overview
@@ -60,9 +60,9 @@ Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server
 
 ### Packet-Aware Transport
 
-- Rewrite outbound block update traffic on a per-player basis.
+- Rewrite outbound single-block and multi-block update traffic on a per-player basis.
 - Support ProtocolLib-backed transport when available, with a fallback sync path for compatibility.
-- Prime newly delivered chunks so hidden ores are corrected as players receive terrain.
+- Prime newly delivered chunks from a cached protected-ore index so hidden ores are corrected as players receive terrain.
 - Preserve a clean transport boundary for deeper packet integrations.
 
 ## Threat Model
@@ -84,6 +84,7 @@ Oreveil is designed to be manageable both from configuration files and in-game a
 - Use config-driven policies for protected ores, exposure rules, host block mapping, and transport behavior.
 - Use `/oreveil reload` to apply rule changes without restarting the server.
 - Use `/oreveil inspect` to inspect how a targeted block is currently classified and presented to the client.
+- Use `/oreveil diagnostics` to inspect packet rewrite counters, chunk priming counters, and cached ore/salt index sizes.
 
 ## Compatibility
 

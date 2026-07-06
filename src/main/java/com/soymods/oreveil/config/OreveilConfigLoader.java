@@ -43,6 +43,7 @@ public final class OreveilConfigLoader {
             Math.max(0, config.getInt("obfuscation.initial-sync-chunk-radius", 0)),
             config.getBoolean("world-model.salted-distribution", false),
             Math.max(1, config.getInt("world-model.salt-density", 64)),
+            parseLong(config.get("world-model.salt-secret"), "world-model.salt-secret", 0L),
             config.getString("transport.mode", "BLOCK_UPDATE_SYNC"),
             protectedOres,
             revealAdjacentMaterials,
@@ -62,6 +63,12 @@ public final class OreveilConfigLoader {
                 + ", managedWorld="
                 + oreveilConfig.worldGeneration().targetWorldName()
         );
+        if (oreveilConfig.saltedDistributionEnabled() && oreveilConfig.saltSecret() == 0L) {
+            logger.warning(
+                "world-model.salted-distribution is enabled with salt-secret=0. "
+                    + "Set world-model.salt-secret to a private random long for seed-resilient fake ore placement."
+            );
+        }
 
         return oreveilConfig;
     }
@@ -137,6 +144,23 @@ public final class OreveilConfigLoader {
             return null;
         }
         return material;
+    }
+
+    private long parseLong(Object rawValue, String path, long fallback) {
+        if (rawValue == null) {
+            return fallback;
+        }
+        if (rawValue instanceof Number number) {
+            return number.longValue();
+        }
+        if (rawValue instanceof String text && !text.isBlank()) {
+            try {
+                return Long.parseLong(text);
+            } catch (NumberFormatException ignored) {
+                logger.warning("Ignoring invalid long value '" + text + "' at " + path + ".");
+            }
+        }
+        return fallback;
     }
 
     private OreveilWorldGenerationConfig parseWorldGeneration(ConfigurationSection section) {

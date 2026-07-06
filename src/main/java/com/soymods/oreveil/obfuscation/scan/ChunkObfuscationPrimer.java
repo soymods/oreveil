@@ -4,7 +4,6 @@ import com.soymods.oreveil.exposure.ExposureService;
 import com.soymods.oreveil.obfuscation.NetworkObfuscationService;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import org.bukkit.Chunk;
-import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 
@@ -24,22 +23,10 @@ public final class ChunkObfuscationPrimer {
     }
 
     public void primeChunk(Player player, Chunk chunk) {
-        World world = chunk.getWorld();
-        int minY = world.getMinHeight();
-        int maxY = world.getMaxHeight();
-        int baseX = chunk.getX() << 4;
-        int baseZ = chunk.getZ() << 4;
-
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                for (int y = minY; y < maxY; y++) {
-                    Block block = world.getBlockAt(baseX + x, y, baseZ + z);
-                    if (exposureService.isProtectedOre(block.getType())) {
-                        if (obfuscationService.getClientVisibleMaterial(block) != block.getType()) {
-                            obfuscationService.syncBlockToPlayer(player, block);
-                        }
-                    }
-                }
+        for (Block block : worldModel.getProtectedOreBlocksInChunk(chunk)) {
+            if (exposureService.isProtectedOre(block.getType())
+                && obfuscationService.getClientVisibleMaterial(block, player) != block.getType()) {
+                obfuscationService.syncBlockToPlayer(player, block);
             }
         }
 

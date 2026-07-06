@@ -61,14 +61,17 @@ public final class OreveilPlugin extends JavaPlugin {
         this.exposureService = new ExposureService(getLogger(), oreveilConfig);
         this.obfuscationService = new NetworkObfuscationService(this, getLogger(), oreveilConfig, worldModel, exposureService);
         this.worldGenerationService = new OreveilWorldGenerationService(this, getLogger(), oreveilConfig);
-        this.worldGenerationService.setMutationSync(obfuscationService::resyncBlocks);
+        this.worldGenerationService.setMutationSync(blocks -> {
+            blocks.forEach(worldModel::refreshBlock);
+            obfuscationService.resyncBlocks(blocks);
+        });
         ChunkObfuscationPrimer chunkPrimer = new ChunkObfuscationPrimer(exposureService, obfuscationService, worldModel);
 
         worldModel.start();
         exposureService.start();
         worldGenerationService.start();
         obfuscationService.start();
-        getServer().getPluginManager().registerEvents(new OreveilWorldListener(obfuscationService, exposureService, worldModel), this);
+        getServer().getPluginManager().registerEvents(new OreveilWorldListener(this, obfuscationService, exposureService, worldModel), this);
         getServer().getPluginManager().registerEvents(new OreveilWorldGenerationListener(worldGenerationService), this);
         getServer().getPluginManager().registerEvents(
             new OreveilPlayerListener(this, chunkPrimer, obfuscationService, this::oreveilConfig),
@@ -135,6 +138,10 @@ public final class OreveilPlugin extends JavaPlugin {
 
     public OreveilWorldGenerationService worldGenerationService() {
         return worldGenerationService;
+    }
+
+    public AuthoritativeWorldModel.CacheStats cacheStats() {
+        return worldModel.cacheStats();
     }
 
     public List<Material> candidateOreMaterials() {
