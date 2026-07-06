@@ -16,7 +16,7 @@ Created by `soymods`.
 
 Oreveil is a server-side Minecraft plugin that prevents x-ray and seed-assisted resource discovery by ensuring unrevealed ore data is never sent to the client in the first place.
 
-Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server authoritative and rewrites block updates before they reach players. Hidden ores are replaced with contextually valid host blocks such as stone, deepslate, or netherrack until normal gameplay legitimately exposes them. Chunk delivery is currently followed by targeted correction packets; direct chunk-buffer rewriting is the next major hardening step.
+Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server authoritative and rewrites block updates before they reach players. Hidden ores are replaced with contextually valid host blocks such as stone, deepslate, or netherrack until normal gameplay legitimately exposes them. With ProtocolLib, cached hidden ore and salt positions are also rewritten in outgoing chunk data before delivery when the server runtime exposes compatible block-state IDs.
 
 ## Core Model
 
@@ -62,7 +62,7 @@ Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server
 
 - Rewrite outbound single-block and multi-block update traffic on a per-player basis.
 - Support ProtocolLib-backed transport when available, with a fallback sync path for compatibility.
-- Prime newly delivered chunks from a cached protected-ore index so hidden ores are corrected as players receive terrain.
+- Rewrite cached hidden ore and salt positions in newly delivered chunks, then prime those chunks from a cached protected-ore index so exposed ores can be revealed correctly.
 - Preserve a clean transport boundary for deeper packet integrations.
 
 ## Threat Model

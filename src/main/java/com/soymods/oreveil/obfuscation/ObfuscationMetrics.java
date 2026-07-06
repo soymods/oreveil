@@ -6,6 +6,9 @@ public final class ObfuscationMetrics {
     private final AtomicLong blockChangePacketsRewritten = new AtomicLong();
     private final AtomicLong multiBlockPacketsRewritten = new AtomicLong();
     private final AtomicLong multiBlockEntriesRewritten = new AtomicLong();
+    private final AtomicLong chunkPacketsRewritten = new AtomicLong();
+    private final AtomicLong chunkBlockEntriesRewritten = new AtomicLong();
+    private final AtomicLong chunkRewriteFailures = new AtomicLong();
     private final AtomicLong chunkPacketsPrimed = new AtomicLong();
     private final AtomicLong chunkPrimeCorrectionsSent = new AtomicLong();
     private final AtomicLong syntheticBlockChangesSent = new AtomicLong();
@@ -18,6 +21,15 @@ public final class ObfuscationMetrics {
     public void recordMultiBlockPacketRewrite(int rewrittenEntries) {
         multiBlockPacketsRewritten.incrementAndGet();
         multiBlockEntriesRewritten.addAndGet(rewrittenEntries);
+    }
+
+    public void recordChunkPacketRewrite(int rewrittenEntries) {
+        chunkPacketsRewritten.incrementAndGet();
+        chunkBlockEntriesRewritten.addAndGet(rewrittenEntries);
+    }
+
+    public void recordChunkRewriteFailure() {
+        chunkRewriteFailures.incrementAndGet();
     }
 
     public void recordChunkPacketPrimed() {
@@ -41,6 +53,9 @@ public final class ObfuscationMetrics {
             blockChangePacketsRewritten.get(),
             multiBlockPacketsRewritten.get(),
             multiBlockEntriesRewritten.get(),
+            chunkPacketsRewritten.get(),
+            chunkBlockEntriesRewritten.get(),
+            chunkRewriteFailures.get(),
             chunkPacketsPrimed.get(),
             chunkPrimeCorrectionsSent.get(),
             syntheticBlockChangesSent.get(),
@@ -52,6 +67,9 @@ public final class ObfuscationMetrics {
         long blockChangePacketsRewritten,
         long multiBlockPacketsRewritten,
         long multiBlockEntriesRewritten,
+        long chunkPacketsRewritten,
+        long chunkBlockEntriesRewritten,
+        long chunkRewriteFailures,
         long chunkPacketsPrimed,
         long chunkPrimeCorrectionsSent,
         long syntheticBlockChangesSent,

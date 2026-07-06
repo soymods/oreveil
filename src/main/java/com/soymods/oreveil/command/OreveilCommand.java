@@ -341,6 +341,20 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         sendMessage(
             sender,
             "Status",
+            metrics.chunkRewriteFailures() == 0 ? STATUS : ERROR,
+            Component.text("Chunk rewrites: packets=", BASE)
+                .append(highlight(String.valueOf(metrics.chunkPacketsRewritten()), STATUS))
+                .append(Component.text("  entries=", BASE))
+                .append(highlight(String.valueOf(metrics.chunkBlockEntriesRewritten()), STATUS))
+                .append(Component.text("  failures=", BASE))
+                .append(highlight(
+                    String.valueOf(metrics.chunkRewriteFailures()),
+                    metrics.chunkRewriteFailures() == 0 ? STATUS : ERROR
+                ))
+        );
+        sendMessage(
+            sender,
+            "Status",
             metrics.multiBlockRewriteFailures() == 0 ? STATUS : ERROR,
             Component.text("ProtocolLib rewrite failures: ", BASE)
                 .append(highlight(

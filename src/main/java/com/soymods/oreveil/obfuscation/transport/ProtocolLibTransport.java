@@ -9,6 +9,7 @@ import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
 import com.comphenix.protocol.wrappers.BlockPosition;
 import com.comphenix.protocol.wrappers.MultiBlockChangeInfo;
+import com.comphenix.protocol.wrappers.WrappedLevelChunkData;
 import com.comphenix.protocol.wrappers.WrappedBlockData;
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.obfuscation.ObfuscationMetrics;
@@ -33,11 +34,13 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
     private final Logger logger;
     private final AuthoritativeWorldModel worldModel;
     private final ObfuscationMetrics metrics;
+    private final ChunkPacketBlockRewriter chunkRewriter;
     private ProtocolManager protocolManager;
     private OreveilConfig config;
     private BiFunction<Block, Player, Material> materialResolver;
     private PacketAdapter packetAdapter;
     private boolean warnedMultiBlockRewriteFailure;
+    private boolean warnedChunkRewriteFailure;
 
     public ProtocolLibTransport(
         Plugin plugin,
@@ -50,6 +53,7 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
         this.logger = logger;
         this.worldModel = worldModel;
         this.metrics = metrics;
+        this.chunkRewriter = new ChunkPacketBlockRewriter(worldModel);
     }
 
     @Override
@@ -192,7 +196,50 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
     }
 
     private void handleChunkPacket(PacketEvent event) {
+        rewriteChunkPacket(event);
         primeChunkAfterPacket(event);
+    }
+
+    private void rewriteChunkPacket(PacketEvent event) {
+        PacketContainer packet = event.getPacket();
+        if (packet.getIntegers().size() < 2 || packet.getLevelChunkData().size() <= 0) {
+            return;
+        }
+
+        Player player = event.getPlayer();
+        World world = player.getWorld();
+        int chunkX = packet.getIntegers().read(0);
+        int chunkZ = packet.getIntegers().read(1);
+        WrappedLevelChunkData.ChunkData chunkData = packet.getLevelChunkData().read(0);
+        if (chunkData == null || chunkData.getBuffer() == null) {
+            return;
+        }
+
+        ChunkPacketBlockRewriter.RewriteResult result = chunkRewriter.rewrite(
+            chunkData.getBuffer(),
+            world.getUID(),
+            world.getEnvironment(),
+            chunkX,
+            chunkZ,
+            world.getMinHeight(),
+            world.getMaxHeight(),
+            config
+        );
+
+        if (result.failed()) {
+            metrics.recordChunkRewriteFailure();
+            if (!warnedChunkRewriteFailure) {
+                warnedChunkRewriteFailure = true;
+                logger.warning("Could not rewrite a chunk packet: " + result.failure().getMessage());
+            }
+            return;
+        }
+
+        if (result.changed()) {
+            chunkData.setBuffer(result.bytes());
+            packet.getLevelChunkData().write(0, chunkData);
+            metrics.recordChunkPacketRewrite(result.rewrittenEntries());
+        }
     }
 
     private void primeChunkAfterPacket(PacketEvent event) {

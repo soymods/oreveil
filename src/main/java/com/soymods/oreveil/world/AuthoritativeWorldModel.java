@@ -4,7 +4,6 @@ import com.soymods.oreveil.config.OreveilConfig;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -42,7 +41,7 @@ public final class AuthoritativeWorldModel {
 
     // Per-chunk salt state: chunkKey → (packed local block pos → fake ore material)
     private final Map<ChunkKey, Map<Integer, Material>> saltCache = new HashMap<>();
-    private final Map<ChunkKey, Set<Integer>> protectedOreCache = new HashMap<>();
+    private final Map<ChunkKey, Map<Integer, Material>> protectedOreCache = new HashMap<>();
 
     private record ChunkKey(UUID worldId, int x, int z) {}
 
@@ -152,7 +151,7 @@ public final class AuthoritativeWorldModel {
 
     /** Returns cached protected ore positions in the given chunk. */
     public List<Block> getProtectedOreBlocksInChunk(Chunk chunk) {
-        Set<Integer> ores = protectedOreCache.get(keyOf(chunk));
+        Map<Integer, Material> ores = protectedOreCache.get(keyOf(chunk));
         if (ores == null || ores.isEmpty()) {
             return List.of();
         }
@@ -161,11 +160,21 @@ public final class AuthoritativeWorldModel {
         int baseX = chunk.getX() << 4;
         int baseZ = chunk.getZ() << 4;
         List<Block> blocks = new ArrayList<>(ores.size());
-        for (int localKey : ores) {
+        for (int localKey : ores.keySet()) {
             int[] loc = unpackLocal(localKey);
             blocks.add(world.getBlockAt(baseX + loc[0], loc[1], baseZ + loc[2]));
         }
         return blocks;
+    }
+
+    public Map<Integer, Material> getProtectedOreEntriesInChunk(UUID worldId, int chunkX, int chunkZ) {
+        Map<Integer, Material> ores = protectedOreCache.get(new ChunkKey(worldId, chunkX, chunkZ));
+        return ores == null || ores.isEmpty() ? Map.of() : Map.copyOf(ores);
+    }
+
+    public Map<Integer, Material> getSaltEntriesInChunk(UUID worldId, int chunkX, int chunkZ) {
+        Map<Integer, Material> salt = saltCache.get(new ChunkKey(worldId, chunkX, chunkZ));
+        return salt == null || salt.isEmpty() ? Map.of() : Map.copyOf(salt);
     }
 
     /** Returns all salt blocks across all currently cached chunks (used for pre-reload drain). */
@@ -189,7 +198,7 @@ public final class AuthoritativeWorldModel {
 
     public CacheStats cacheStats() {
         int cachedProtectedOres = 0;
-        for (Set<Integer> ores : protectedOreCache.values()) {
+        for (Map<Integer, Material> ores : protectedOreCache.values()) {
             cachedProtectedOres += ores.size();
         }
 
@@ -220,9 +229,9 @@ public final class AuthoritativeWorldModel {
             salt.remove(packed);
         }
 
-        Set<Integer> ores = protectedOreCache.computeIfAbsent(key, ignored -> new HashSet<>());
+        Map<Integer, Material> ores = protectedOreCache.computeIfAbsent(key, ignored -> new HashMap<>());
         if (isProtectedOre(block.getType())) {
-            ores.add(packed);
+            ores.put(packed, block.getType());
         } else {
             ores.remove(packed);
         }
@@ -329,19 +338,20 @@ public final class AuthoritativeWorldModel {
         return new ChunkKey(chunk.getWorld().getUID(), chunk.getX(), chunk.getZ());
     }
 
-    private Set<Integer> scanProtectedOres(Chunk chunk) {
+    private Map<Integer, Material> scanProtectedOres(Chunk chunk) {
         World world = chunk.getWorld();
         int minY = world.getMinHeight();
         int maxY = world.getMaxHeight();
         int baseX = chunk.getX() << 4;
         int baseZ = chunk.getZ() << 4;
-        Set<Integer> ores = new HashSet<>();
+        Map<Integer, Material> ores = new HashMap<>();
 
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 for (int y = minY; y < maxY; y++) {
-                    if (isProtectedOre(world.getBlockAt(baseX + x, y, baseZ + z).getType())) {
-                        ores.add(packLocal(x, y, z));
+                    Material type = world.getBlockAt(baseX + x, y, baseZ + z).getType();
+                    if (isProtectedOre(type)) {
+                        ores.put(packLocal(x, y, z), type);
                     }
                 }
             }
@@ -357,7 +367,7 @@ public final class AuthoritativeWorldModel {
         if (salt != null) {
             salt.remove(packed);
         }
-        Set<Integer> ores = protectedOreCache.get(key);
+        Map<Integer, Material> ores = protectedOreCache.get(key);
         if (ores != null) {
             ores.remove(packed);
         }

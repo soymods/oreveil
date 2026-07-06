@@ -16,13 +16,14 @@ This rule set keeps reveal semantics explicit and config-driven while leaving ro
 - Loaded chunks are indexed once for protected ore positions, so join/teleport/reload priming can avoid rescanning every block in the chunk.
 - Block placement, breaks, explosions, piston movement, fluid flow, falling-block changes, and natural block transformations refresh the cached protected-ore index.
 - `/oreveil diagnostics` reports rewrite counters, chunk prime counters, synthetic block sends, ProtocolLib wrapper failures, and cache sizes.
-- This is a transport boundary, not the final packet rewrite implementation. Full chunk-packet obfuscation should plug in behind the same `ObfuscationTransport` interface.
+- ProtocolLib chunk rewriting uses the cached protected-ore and salt index to rewrite outgoing chunk block-state data before send when runtime block-state IDs are available.
+- Post-send chunk priming still runs after chunk delivery so legitimately exposed ores can be revealed according to the per-player exposure rules.
 
 ## ProtocolLib Path
 
 - When ProtocolLib is present and `transport.mode` resolves to `AUTO` or `PROTOCOLLIB`, Oreveil rewrites outbound `BLOCK_CHANGE` and `MULTI_BLOCK_CHANGE` packets per player.
-- Outbound chunk packets are followed by a targeted prime pass for that player so hidden ores are corrected to their host blocks immediately after chunk delivery.
-- Oreveil does not currently rewrite chunk packet buffers directly. The stable production path is packet-aware block rewriting plus post-send chunk priming.
+- Outbound chunk packets are rewritten directly for cached hidden ore/salt positions, then followed by a targeted prime pass for that player.
+- If the server runtime cannot expose block-state IDs or the chunk buffer format changes, Oreveil leaves that chunk packet untouched, records a diagnostics failure, and still uses post-send chunk priming.
 
 ## Salted Distribution
 
