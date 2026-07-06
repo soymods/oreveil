@@ -14,6 +14,7 @@ import org.bukkit.Chunk;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.plugin.Plugin;
 
 /**
@@ -42,6 +43,15 @@ public final class AuthoritativeWorldModel {
     // Per-chunk salt state: chunkKey → (packed local block pos → fake ore material)
     private final Map<ChunkKey, Map<Integer, Material>> saltCache = new HashMap<>();
     private final Map<ChunkKey, Map<Integer, Material>> protectedOreCache = new HashMap<>();
+    private final Map<ChunkKey, Set<Integer>> exposedProtectedOreCache = new HashMap<>();
+    private static final BlockFace[] CARDINAL_FACES = {
+        BlockFace.UP,
+        BlockFace.DOWN,
+        BlockFace.NORTH,
+        BlockFace.SOUTH,
+        BlockFace.EAST,
+        BlockFace.WEST,
+    };
 
     private record ChunkKey(UUID worldId, int x, int z) {}
 
@@ -72,12 +82,14 @@ public final class AuthoritativeWorldModel {
     public void stop() {
         saltCache.clear();
         protectedOreCache.clear();
+        exposedProtectedOreCache.clear();
         logger.info("Authoritative world model stopped.");
     }
 
     public void reload(OreveilConfig newConfig) {
         saltCache.clear();
         protectedOreCache.clear();
+        exposedProtectedOreCache.clear();
         this.config = newConfig;
         int indexed = seedAllLoadedChunks();
         logger.info(
@@ -102,7 +114,9 @@ public final class AuthoritativeWorldModel {
             return;
         }
 
-        protectedOreCache.put(key, scanProtectedOres(chunk));
+        ChunkOreScan scan = scanProtectedOres(chunk);
+        protectedOreCache.put(key, scan.ores());
+        exposedProtectedOreCache.put(key, scan.exposed());
         if (!config.saltedDistributionEnabled()) {
             saltCache.remove(key);
             return;
@@ -117,6 +131,7 @@ public final class AuthoritativeWorldModel {
         ChunkKey key = keyOf(chunk);
         saltCache.remove(key);
         protectedOreCache.remove(key);
+        exposedProtectedOreCache.remove(key);
     }
 
     // -------------------------------------------------------------------------
@@ -170,6 +185,44 @@ public final class AuthoritativeWorldModel {
     public Map<Integer, Material> getProtectedOreEntriesInChunk(UUID worldId, int chunkX, int chunkZ) {
         Map<Integer, Material> ores = protectedOreCache.get(new ChunkKey(worldId, chunkX, chunkZ));
         return ores == null || ores.isEmpty() ? Map.of() : Map.copyOf(ores);
+    }
+
+    public Map<Integer, Material> getBuriedProtectedOreEntriesInChunk(UUID worldId, int chunkX, int chunkZ) {
+        ChunkKey key = new ChunkKey(worldId, chunkX, chunkZ);
+        Map<Integer, Material> ores = protectedOreCache.get(key);
+        if (ores == null || ores.isEmpty()) {
+            return Map.of();
+        }
+        if (!config.revealOnExposure()) {
+            return Map.copyOf(ores);
+        }
+
+        Set<Integer> exposed = exposedProtectedOreCache.get(key);
+        if (exposed == null || exposed.isEmpty()) {
+            return Map.copyOf(ores);
+        }
+
+        Map<Integer, Material> buried = new HashMap<>();
+        for (Map.Entry<Integer, Material> entry : ores.entrySet()) {
+            if (!exposed.contains(entry.getKey())) {
+                buried.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return buried.isEmpty() ? Map.of() : Map.copyOf(buried);
+    }
+
+    public String describeChunkRewriteState(Block block) {
+        ChunkKey key = keyOf(block.getChunk());
+        int packed = packLocal(block.getX() & 0xF, block.getY(), block.getZ() & 0xF);
+        Map<Integer, Material> ores = protectedOreCache.get(key);
+        if (ores == null || !ores.containsKey(packed)) {
+            return "not cached";
+        }
+        if (!config.revealOnExposure()) {
+            return "hidden: exposure reveal off";
+        }
+        Set<Integer> exposed = exposedProtectedOreCache.get(key);
+        return exposed != null && exposed.contains(packed) ? "kept visible: exposed" : "hidden: buried";
     }
 
     public Map<Integer, Material> getSaltEntriesInChunk(UUID worldId, int chunkX, int chunkZ) {
@@ -234,6 +287,10 @@ public final class AuthoritativeWorldModel {
             ores.put(packed, block.getType());
         } else {
             ores.remove(packed);
+        }
+        refreshExposure(block);
+        for (BlockFace face : CARDINAL_FACES) {
+            refreshExposure(block.getRelative(face));
         }
     }
 
@@ -338,26 +395,72 @@ public final class AuthoritativeWorldModel {
         return new ChunkKey(chunk.getWorld().getUID(), chunk.getX(), chunk.getZ());
     }
 
-    private Map<Integer, Material> scanProtectedOres(Chunk chunk) {
+    private ChunkOreScan scanProtectedOres(Chunk chunk) {
         World world = chunk.getWorld();
         int minY = world.getMinHeight();
         int maxY = world.getMaxHeight();
         int baseX = chunk.getX() << 4;
         int baseZ = chunk.getZ() << 4;
         Map<Integer, Material> ores = new HashMap<>();
+        Set<Integer> exposed = new java.util.HashSet<>();
 
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 for (int y = minY; y < maxY; y++) {
-                    Material type = world.getBlockAt(baseX + x, y, baseZ + z).getType();
+                    Block block = world.getBlockAt(baseX + x, y, baseZ + z);
+                    Material type = block.getType();
                     if (isProtectedOre(type)) {
-                        ores.put(packLocal(x, y, z), type);
+                        int packed = packLocal(x, y, z);
+                        ores.put(packed, type);
+                        if (isExposed(block)) {
+                            exposed.add(packed);
+                        }
                     }
                 }
             }
         }
 
-        return ores;
+        return new ChunkOreScan(ores, exposed);
+    }
+
+    private void refreshExposure(Block block) {
+        ChunkKey key = keyOf(block.getChunk());
+        int packed = packLocal(block.getX() & 0xF, block.getY(), block.getZ() & 0xF);
+        Set<Integer> exposed = exposedProtectedOreCache.computeIfAbsent(key, ignored -> new java.util.HashSet<>());
+        if (isProtectedOre(block.getType()) && isExposed(block)) {
+            exposed.add(packed);
+        } else {
+            exposed.remove(packed);
+        }
+    }
+
+    private boolean isExposed(Block block) {
+        for (BlockFace face : CARDINAL_FACES) {
+            Material neighbor = safeNeighborType(block, face);
+            if (neighbor == null) {
+                continue;
+            }
+            if (config.revealAdjacentMaterials().contains(neighbor)
+                || config.revealTransparentMaterials().contains(neighbor)
+                || (config.revealNextToNonOccludingBlocks() && neighbor.isBlock() && !neighbor.isOccluding())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Material safeNeighborType(Block block, BlockFace face) {
+        World world = block.getWorld();
+        int x = block.getX() + face.getModX();
+        int y = block.getY() + face.getModY();
+        int z = block.getZ() + face.getModZ();
+        if (y < world.getMinHeight() || y >= world.getMaxHeight()) {
+            return Material.AIR;
+        }
+        if (!world.isChunkLoaded(x >> 4, z >> 4)) {
+            return null;
+        }
+        return world.getBlockAt(x, y, z).getType();
     }
 
     private void removeCachedBlock(Block block) {
@@ -371,6 +474,10 @@ public final class AuthoritativeWorldModel {
         if (ores != null) {
             ores.remove(packed);
         }
+        Set<Integer> exposed = exposedProtectedOreCache.get(key);
+        if (exposed != null) {
+            exposed.remove(packed);
+        }
     }
 
     // lx/lz: 0–15 (4 bits each), y offset by 2048 to handle negative heights
@@ -381,4 +488,6 @@ public final class AuthoritativeWorldModel {
     private static int[] unpackLocal(int packed) {
         return new int[]{packed & 0xF, (packed >> 8) - 2048, (packed >> 4) & 0xF};
     }
+
+    private record ChunkOreScan(Map<Integer, Material> ores, Set<Integer> exposed) {}
 }

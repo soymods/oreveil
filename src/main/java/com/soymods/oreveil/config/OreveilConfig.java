@@ -11,7 +11,6 @@ public record OreveilConfig(
     boolean revealOnExposure,
     boolean revealNextToNonOccludingBlocks,
     int revealProximityBlocks,
-    boolean keepRevealedExposedOres,
     int liveSyncRadiusBlocks,
     int initialSyncChunkRadius,
     boolean saltedDistributionEnabled,

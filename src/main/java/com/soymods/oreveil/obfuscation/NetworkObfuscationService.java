@@ -8,10 +8,7 @@ import com.soymods.oreveil.util.BlockNeighborhoods;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
@@ -31,7 +28,6 @@ public final class NetworkObfuscationService {
     private final ObfuscationMetrics metrics;
     private ObfuscationTransport transport;
     private final Plugin plugin;
-    private final Map<UUID, Set<RevealedBlockKey>> revealedExposedOresByPlayer = new ConcurrentHashMap<>();
 
     public NetworkObfuscationService(
         Plugin plugin,
@@ -86,8 +82,8 @@ public final class NetworkObfuscationService {
     // -------------------------------------------------------------------------
 
     /**
-     * Per-player visibility: buried ores stay hidden, while exposed cave ores can be
-     * revealed from a larger gameplay-friendly radius.
+     * Per-player visibility: buried ores stay hidden, while exposed cave ores are visible
+     * in delivered chunks so caves do not pop based on short distance thresholds.
      */
     public Material getClientVisibleMaterial(Block block, Player viewer) {
         if (!config.obfuscationEnabled()) {
@@ -107,22 +103,9 @@ public final class NetworkObfuscationService {
         }
 
         if (config.revealOnExposure() && exposureService.isLegitimatelyExposed(block)) {
-            int radius = config.revealProximityBlocks();
-            if (radius <= 0) {
-                return block.getType();
-            }
-            if (viewer != null && isWithinDistance(viewer, block, radius)) {
-                rememberRevealedOre(viewer, block);
-                return block.getType();
-            }
-            if (viewer != null && config.keepRevealedExposedOres() && isKnownRevealedOre(viewer, block)) {
-                return block.getType();
-            }
+            return block.getType();
         }
 
-        if (viewer != null && !config.keepRevealedExposedOres()) {
-            forgetRevealedOre(viewer, block);
-        }
         return hostBlockResolver.resolve(block, config);
     }
 
@@ -195,17 +178,11 @@ public final class NetworkObfuscationService {
         transport.syncBlockToPlayer(player, block, this::getClientVisibleMaterial);
     }
 
-    public void clearPlayerVisibility(Player player) {
-        revealedExposedOresByPlayer.remove(player.getUniqueId());
-    }
-
     public void syncNearbyExposedOres(Player player) {
         int radius = config.revealProximityBlocks();
         if (radius <= 0) {
             return;
         }
-
-        syncPreviouslyRevealedOres(player);
 
         Location origin = player.getLocation();
         World world = origin.getWorld();
@@ -229,49 +206,6 @@ public final class NetworkObfuscationService {
                     }
                 }
             }
-        }
-    }
-
-    private void syncPreviouslyRevealedOres(Player player) {
-        Set<RevealedBlockKey> revealed = revealedExposedOresByPlayer.get(player.getUniqueId());
-        if (revealed == null || revealed.isEmpty()) {
-            return;
-        }
-
-        World world = player.getWorld();
-        for (RevealedBlockKey key : List.copyOf(revealed)) {
-            if (!key.worldId().equals(world.getUID())) {
-                revealed.remove(key);
-                continue;
-            }
-            if (!world.isChunkLoaded(key.x() >> 4, key.z() >> 4) || !isWithinPlayerViewDistance(player, key)) {
-                revealed.remove(key);
-                continue;
-            }
-            Block block = world.getBlockAt(key.x(), key.y(), key.z());
-            transport.syncBlockToPlayer(player, block, this::getClientVisibleMaterial);
-        }
-    }
-
-    private void rememberRevealedOre(Player player, Block block) {
-        revealedExposedOresByPlayer
-            .computeIfAbsent(player.getUniqueId(), ignored -> ConcurrentHashMap.newKeySet())
-            .add(RevealedBlockKey.from(block));
-    }
-
-    private boolean isKnownRevealedOre(Player player, Block block) {
-        Set<RevealedBlockKey> revealed = revealedExposedOresByPlayer.get(player.getUniqueId());
-        return revealed != null && revealed.contains(RevealedBlockKey.from(block));
-    }
-
-    private void forgetRevealedOre(Player player, Block block) {
-        Set<RevealedBlockKey> revealed = revealedExposedOresByPlayer.get(player.getUniqueId());
-        if (revealed == null) {
-            return;
-        }
-        revealed.remove(RevealedBlockKey.from(block));
-        if (revealed.isEmpty()) {
-            revealedExposedOresByPlayer.remove(player.getUniqueId());
         }
     }
 
@@ -393,38 +327,9 @@ public final class NetworkObfuscationService {
         }
 
         if (exposedAfterBreak) {
-            int radius = config.revealProximityBlocks();
-            if (radius <= 0 || (viewer != null && isWithinDistance(viewer, block, radius))) {
-                if (viewer != null) {
-                    rememberRevealedOre(viewer, block);
-                }
-                return block.getType();
-            }
-            if (viewer != null && config.keepRevealedExposedOres() && isKnownRevealedOre(viewer, block)) {
-                return block.getType();
-            }
+            return block.getType();
         }
 
         return hostBlockResolver.resolve(block, config);
-    }
-
-    private boolean isWithinPlayerViewDistance(Player player, RevealedBlockKey key) {
-        Location loc = player.getLocation();
-        int playerChunkX = loc.getBlockX() >> 4;
-        int playerChunkZ = loc.getBlockZ() >> 4;
-        int chunkRadius = plugin.getServer().getViewDistance() + 1;
-        return Math.abs((key.x() >> 4) - playerChunkX) <= chunkRadius
-            && Math.abs((key.z() >> 4) - playerChunkZ) <= chunkRadius;
-    }
-
-    private record RevealedBlockKey(UUID worldId, int x, int y, int z) {
-        private static RevealedBlockKey from(Block block) {
-            return new RevealedBlockKey(
-                block.getWorld().getUID(),
-                block.getX(),
-                block.getY(),
-                block.getZ()
-            );
-        }
     }
 }

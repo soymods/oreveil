@@ -167,7 +167,7 @@ final class ChunkPacketBlockRewriterTest {
     private static ChunkPacketBlockRewriter rewriter(Map<Integer, Material> ores, Map<Integer, Material> salt) {
         ChunkPacketBlockRewriter.ChunkEntryProvider provider = new ChunkPacketBlockRewriter.ChunkEntryProvider() {
             @Override
-            public Map<Integer, Material> protectedOreEntries(UUID worldId, int chunkX, int chunkZ) {
+            public Map<Integer, Material> buriedProtectedOreEntries(UUID worldId, int chunkX, int chunkZ) {
                 return ores;
             }
 
@@ -198,7 +198,6 @@ final class ChunkPacketBlockRewriterTest {
             true,
             true,
             6,
-            true,
             64,
             0,
             false,

@@ -136,6 +136,10 @@ public final class OreveilPlugin extends JavaPlugin {
         return obfuscationService;
     }
 
+    public AuthoritativeWorldModel worldModel() {
+        return worldModel;
+    }
+
     public OreveilWorldGenerationService worldGenerationService() {
         return worldGenerationService;
     }
@@ -151,15 +155,44 @@ public final class OreveilPlugin extends JavaPlugin {
     }
 
     public void toggleGlobalProtectedOre(Material material) {
-        List<String> ores = new ArrayList<>(getConfig().getStringList("protected-ores"));
+        toggleMaterialListEntry("protected-ores", material);
+    }
+
+    public OreveilConfig toggleMaterialListEntry(String path, Material material) {
+        List<String> values = new ArrayList<>(getConfig().getStringList(path));
         String target = material.name();
-        if (!ores.removeIf(entry -> entry.equalsIgnoreCase(target))) {
-            ores.add(target);
-            ores.sort(String::compareToIgnoreCase);
+        if (!values.removeIf(entry -> entry.equalsIgnoreCase(target))) {
+            values.add(target);
         }
-        getConfig().set("protected-ores", ores);
+        values.sort(String::compareToIgnoreCase);
+        getConfig().set(path, values);
         saveConfig();
-        reloadOreveilConfig();
+        return reloadOreveilConfig();
+    }
+
+    public OreveilConfig setMaterialListEntry(String path, Material material, boolean enabled) {
+        List<String> values = new ArrayList<>(getConfig().getStringList(path));
+        String target = material.name();
+        values.removeIf(entry -> entry.equalsIgnoreCase(target));
+        if (enabled) {
+            values.add(target);
+        }
+        values.sort(String::compareToIgnoreCase);
+        getConfig().set(path, values);
+        saveConfig();
+        return reloadOreveilConfig();
+    }
+
+    public OreveilConfig setConfigMapEntry(String path, String key, String value) {
+        getConfig().set(path + "." + key, value);
+        saveConfig();
+        return reloadOreveilConfig();
+    }
+
+    public OreveilConfig clearConfigMapEntry(String path, String key) {
+        getConfig().set(path + "." + key, null);
+        saveConfig();
+        return reloadOreveilConfig();
     }
 
     public OreveilConfig toggleBooleanSetting(String path) {
@@ -175,6 +208,12 @@ public final class OreveilPlugin extends JavaPlugin {
     }
 
     public OreveilConfig setIntegerSetting(String path, int value) {
+        getConfig().set(path, value);
+        saveConfig();
+        return reloadOreveilConfig();
+    }
+
+    public OreveilConfig setDoubleSetting(String path, double value) {
         getConfig().set(path, value);
         saveConfig();
         return reloadOreveilConfig();

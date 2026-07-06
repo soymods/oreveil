@@ -15,6 +15,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Function;
 import java.util.stream.Stream;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -63,11 +64,16 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             case "inspect" -> handleInspect(sender);
             case "status" -> handleStatus(sender, label);
             case "diagnostics", "diag" -> handleDiagnostics(sender);
+            case "settings" -> handleSettings(sender, label, args);
+            case "get" -> handleGet(sender, label, args);
+            case "explain" -> handleExplain(sender, label, args);
             case "ores" -> {
                 sendOreMenu(sender);
                 yield true;
             }
             case "ore" -> handleOreToggle(sender, label, args);
+            case "exposure" -> handleExposure(sender, label, args);
+            case "host" -> handleHost(sender, label, args);
             case "toggle" -> handleToggle(sender, label, args);
             case "set" -> handleSet(sender, label, args);
             case "transport" -> handleTransport(sender, label, args);
@@ -88,8 +94,13 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
                 "inspect",
                 "status",
                 "diagnostics",
+                "settings",
+                "get",
+                "explain",
                 "ores",
                 "ore",
+                "exposure",
+                "host",
                 "toggle",
                 "set",
                 "transport",
@@ -97,23 +108,50 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             ));
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("ore")) {
-            return filter(args[1], List.of("toggle"));
+            return filter(args[1], List.of("add", "remove", "toggle"));
         }
-        if (args.length == 3 && args[0].equalsIgnoreCase("ore") && args[1].equalsIgnoreCase("toggle")) {
+        if (args.length == 3 && args[0].equalsIgnoreCase("ore") && List.of("add", "remove", "toggle").contains(args[1].toLowerCase(Locale.ROOT))) {
             return filter(args[2], plugin.candidateOreMaterials().stream().map(Enum::name).toList());
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("toggle")) {
-            return filter(args[1], Arrays.stream(ToggleSetting.values()).map(ToggleSetting::id).toList());
+        if (args.length == 2 && args[0].equalsIgnoreCase("exposure")) {
+            return filter(args[1], List.of("status", "adjacent", "transparent"));
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("set")) {
-            return filter(args[1], Arrays.stream(IntSetting.values()).map(IntSetting::id).toList());
+        if (args.length == 3 && args[0].equalsIgnoreCase("exposure") && isExposureList(args[1])) {
+            return filter(args[2], List.of("add", "remove", "toggle"));
+        }
+        if (args.length == 4 && args[0].equalsIgnoreCase("exposure") && isExposureList(args[1])) {
+            return filter(args[3], allBlockMaterialNames());
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("host")) {
+            return filter(args[1], List.of("status", "default", "override"));
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("host") && args[1].equalsIgnoreCase("default")) {
+            return filter(args[2], Arrays.stream(World.Environment.values()).map(Enum::name).toList());
+        }
+        if (args.length == 4 && args[0].equalsIgnoreCase("host") && args[1].equalsIgnoreCase("default")) {
+            return filter(args[3], allBlockMaterialNames());
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("host") && args[1].equalsIgnoreCase("override")) {
+            return filter(args[2], plugin.candidateOreMaterials().stream().map(Enum::name).toList());
+        }
+        if (args.length == 4 && args[0].equalsIgnoreCase("host") && args[1].equalsIgnoreCase("override")) {
+            return filter(args[3], List.of("clear", "STONE", "DEEPSLATE", "NETHERRACK", "END_STONE"));
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("toggle")) {
+            return filter(args[1], ConfigSetting.booleanSettings().stream().map(ConfigSetting::id).toList());
+        }
+        if (args.length == 2 && (args[0].equalsIgnoreCase("set") || args[0].equalsIgnoreCase("get") || args[0].equalsIgnoreCase("explain"))) {
+            return filter(args[1], ConfigSetting.settingIds());
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("set")) {
-            IntSetting setting = IntSetting.fromId(args[1]);
+            ConfigSetting setting = ConfigSetting.fromId(args[1]);
             if (setting == null) {
                 return List.of();
             }
             return filter(args[2], setting.suggestions());
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("settings")) {
+            return filter(args[1], ConfigSetting.sectionIds());
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("transport")) {
             return filter(args[1], Arrays.stream(TransportMode.values()).map(Enum::name).toList());
@@ -212,6 +250,13 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             sender,
             "Status",
             STATUS,
+            Component.text("Chunk rewrite: ", BASE)
+                .append(highlight(plugin.worldModel().describeChunkRewriteState(block), STATUS))
+        );
+        sendMessage(
+            sender,
+            "Status",
+            STATUS,
             Component.text("Exposure reasons: ", BASE)
                 .append(highlight(reasons.isEmpty() ? "none" : String.join("; ", reasons), reasons.isEmpty() ? MUTED : STATUS))
         );
@@ -242,55 +287,55 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             sender,
             "Controls",
             CONTROLS,
-            numericControl(IntSetting.LIVE_SYNC_RADIUS, config.liveSyncRadiusBlocks(), label)
+            numericControl(ConfigSetting.LIVE_SYNC_RADIUS, config.liveSyncRadiusBlocks(), label)
         );
         sendMessage(
             sender,
             "Controls",
             CONTROLS,
-            numericControl(IntSetting.CHUNK_PRIME_RADIUS, config.initialSyncChunkRadius(), label)
+            numericControl(ConfigSetting.CHUNK_PRIME_RADIUS, config.initialSyncChunkRadius(), label)
         );
         sendMessage(
             sender,
             "Controls",
             CONTROLS,
-            numericControl(IntSetting.REVEAL_PROXIMITY, config.revealProximityBlocks(), label)
+            numericControl(ConfigSetting.REVEAL_PROXIMITY, config.revealProximityBlocks(), label)
         );
         sendMessage(
             sender,
             "Controls",
             CONTROLS,
-            toggleControl(ToggleSetting.REVEAL_ON_EXPOSURE, config.revealOnExposure(), label)
+            toggleControl(ConfigSetting.REVEAL_ON_EXPOSURE, config.revealOnExposure(), label)
         );
         sendMessage(
             sender,
             "Controls",
             CONTROLS,
-            toggleControl(ToggleSetting.NON_OCCLUDING_REVEAL, config.revealNextToNonOccludingBlocks(), label)
+            toggleControl(ConfigSetting.NON_OCCLUDING_REVEAL, config.revealNextToNonOccludingBlocks(), label)
         );
         sendMessage(
             sender,
             "World",
             WORLD,
-            toggleControl(ToggleSetting.WORLD_GENERATION_ENABLED, config.worldGeneration().enabled(), label)
+            toggleControl(ConfigSetting.WORLD_GENERATION_ENABLED, config.worldGeneration().enabled(), label)
         );
         sendMessage(
             sender,
             "World",
             WORLD,
-            toggleControl(ToggleSetting.OBFUSCATION_ENABLED, config.obfuscationEnabled(), label)
+            toggleControl(ConfigSetting.OBFUSCATION_ENABLED, config.obfuscationEnabled(), label)
         );
         sendMessage(
             sender,
             "World",
             WORLD,
-            toggleControl(ToggleSetting.SALTED_DISTRIBUTION, config.saltedDistributionEnabled(), label)
+            toggleControl(ConfigSetting.SALTED_DISTRIBUTION, config.saltedDistributionEnabled(), label)
         );
         sendMessage(
             sender,
             "World",
             WORLD,
-            numericControl(IntSetting.SALT_DENSITY, config.saltDensity(), label)
+            numericControl(ConfigSetting.SALT_DENSITY, config.saltDensity(), label)
         );
         sendMessage(
             sender,
@@ -570,8 +615,8 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleOreToggle(CommandSender sender, String label, String[] args) {
-        if (args.length < 3 || !args[1].equalsIgnoreCase("toggle")) {
-            sendError(sender, "Use /" + label + " ore toggle <ore>.");
+        if (args.length < 3 || !List.of("add", "remove", "toggle").contains(args[1].toLowerCase(Locale.ROOT))) {
+            sendError(sender, "Use /" + label + " ore <add|remove|toggle> <ore>.");
             return true;
         }
 
@@ -582,16 +627,144 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         }
 
         boolean enabledBefore = plugin.oreveilConfig().protectedOres().contains(material);
-        plugin.toggleGlobalProtectedOre(material);
+        String action = args[1].toLowerCase(Locale.ROOT);
+        if (action.equals("toggle")) {
+            plugin.toggleGlobalProtectedOre(material);
+        } else {
+            plugin.setMaterialListEntry("protected-ores", material, action.equals("add"));
+        }
+        boolean enabledAfter = action.equals("toggle") ? !enabledBefore : action.equals("add");
         sendMessage(
             sender,
             "Ores",
             ORES,
-            Component.text(enabledBefore ? "Stopped hiding " : "Now hiding ", BASE)
-                .append(highlight(material.name(), enabledBefore ? MUTED : ACTIVE))
+            Component.text(enabledAfter ? "Now hiding " : "Stopped hiding ", BASE)
+                .append(highlight(material.name(), enabledAfter ? ACTIVE : MUTED))
                 .append(Component.text(".", BASE))
         );
         sendOreMenu(sender);
+        return true;
+    }
+
+    private boolean handleExposure(CommandSender sender, String label, String[] args) {
+        if (args.length == 1 || args[1].equalsIgnoreCase("status")) {
+            sendExposureStatus(sender, label);
+            return true;
+        }
+
+        if (!isExposureList(args[1]) || args.length < 4 || !List.of("add", "remove", "toggle").contains(args[2].toLowerCase(Locale.ROOT))) {
+            sendError(sender, "Use /" + label + " exposure <adjacent|transparent> <add|remove|toggle> <material>.");
+            return true;
+        }
+
+        Material material = parseBlockMaterial(sender, args[3]);
+        if (material == null) {
+            return true;
+        }
+
+        String path = exposurePath(args[1]);
+        String action = args[2].toLowerCase(Locale.ROOT);
+        boolean containedBefore = exposureContains(args[1], material);
+        if (action.equals("toggle")) {
+            plugin.toggleMaterialListEntry(path, material);
+        } else {
+            plugin.setMaterialListEntry(path, material, action.equals("add"));
+        }
+        boolean containedAfter = action.equals("toggle") ? !containedBefore : action.equals("add");
+
+        sendMessage(
+            sender,
+            "Exposure",
+            CONTROLS,
+            Component.text(containedAfter ? "Added " : "Removed ", BASE)
+                .append(highlight(material.name(), containedAfter ? CONTROLS : MUTED))
+                .append(Component.text(containedAfter ? " to " : " from ", BASE))
+                .append(highlight(args[1].toLowerCase(Locale.ROOT), CONTROLS))
+                .append(Component.text(" exposure.", BASE))
+        );
+        sendExposureStatus(sender, label);
+        return true;
+    }
+
+    private boolean handleHost(CommandSender sender, String label, String[] args) {
+        if (args.length == 1 || args[1].equalsIgnoreCase("status")) {
+            sendHostStatus(sender, label);
+            return true;
+        }
+
+        if (args[1].equalsIgnoreCase("default")) {
+            if (args.length < 4) {
+                sendError(sender, "Use /" + label + " host default <environment> <material>.");
+                return true;
+            }
+
+            World.Environment environment = parseEnvironment(sender, args[2]);
+            Material material = parseBlockMaterial(sender, args[3]);
+            if (environment == null || material == null) {
+                return true;
+            }
+
+            plugin.setConfigMapEntry("host-blocks.dimension-defaults", environment.name(), material.name());
+            sendMessage(
+                sender,
+                "Host",
+                WORLD,
+                Component.text("Default host for ", BASE)
+                    .append(highlight(environment.name(), WORLD))
+                    .append(Component.text(" is now ", BASE))
+                    .append(highlight(material.name(), WORLD))
+                    .append(Component.text(".", BASE))
+            );
+            sendHostStatus(sender, label);
+            return true;
+        }
+
+        if (args[1].equalsIgnoreCase("override")) {
+            if (args.length < 4) {
+                sendError(sender, "Use /" + label + " host override <ore> <material|clear>.");
+                return true;
+            }
+
+            Material ore = parseBlockMaterial(sender, args[2]);
+            if (ore == null) {
+                return true;
+            }
+
+            if (args[3].equalsIgnoreCase("clear")) {
+                plugin.clearConfigMapEntry("host-blocks.ore-overrides", ore.name());
+                sendMessage(
+                    sender,
+                    "Host",
+                    WORLD,
+                    Component.text("Cleared host override for ", BASE)
+                        .append(highlight(ore.name(), WORLD))
+                        .append(Component.text(".", BASE))
+                );
+                sendHostStatus(sender, label);
+                return true;
+            }
+
+            Material host = parseBlockMaterial(sender, args[3]);
+            if (host == null) {
+                return true;
+            }
+
+            plugin.setConfigMapEntry("host-blocks.ore-overrides", ore.name(), host.name());
+            sendMessage(
+                sender,
+                "Host",
+                WORLD,
+                Component.text("Host override for ", BASE)
+                    .append(highlight(ore.name(), WORLD))
+                    .append(Component.text(" is now ", BASE))
+                    .append(highlight(host.name(), WORLD))
+                    .append(Component.text(".", BASE))
+            );
+            sendHostStatus(sender, label);
+            return true;
+        }
+
+        sendError(sender, "Unknown host subcommand. Use /" + label + " host status.");
         return true;
     }
 
@@ -601,14 +774,14 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        ToggleSetting setting = ToggleSetting.fromId(args[1]);
-        if (setting == null) {
+        ConfigSetting setting = ConfigSetting.fromId(args[1]);
+        if (setting == null || setting.type() != SettingType.BOOLEAN) {
             sendError(sender, "Unknown toggle " + args[1] + ".");
             return true;
         }
 
         OreveilConfig config = plugin.toggleBooleanSetting(setting.path());
-        boolean value = setting.read(config);
+        boolean value = (Boolean) setting.read(config);
         sendMessage(
             sender,
             setting.sectionTitle(),
@@ -617,9 +790,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
                 .append(highlight(onOff(value), value ? setting.sectionColor() : MUTED))
                 .append(Component.text(".", BASE))
         );
-        return setting == ToggleSetting.SALTED_DISTRIBUTION || setting == ToggleSetting.OBFUSCATION_ENABLED
-            ? handleStatus(sender, label)
-            : handleStatus(sender, label);
+        return handleStatus(sender, label);
     }
 
     private boolean handleSet(CommandSender sender, String label, String[] args) {
@@ -628,22 +799,20 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        IntSetting setting = IntSetting.fromId(args[1]);
+        ConfigSetting setting = ConfigSetting.fromId(args[1]);
         if (setting == null) {
-            sendError(sender, "Unknown numeric setting " + args[1] + ".");
+            sendError(sender, "Unknown setting " + args[1] + ".");
             return true;
         }
 
-        int value;
-        try {
-            value = Integer.parseInt(args[2]);
-        } catch (NumberFormatException ignored) {
-            sendError(sender, args[2] + " is not a valid integer.");
+        Object value = setting.parse(args[2]);
+        if (value == ConfigSetting.INVALID_VALUE) {
+            sendError(sender, args[2] + " is not valid for " + setting.id() + ".");
             return true;
         }
 
-        int clamped = setting.clamp(value);
-        plugin.setIntegerSetting(setting.path(), clamped);
+        OreveilConfig config = applySetting(setting, value);
+        Object savedValue = setting.read(config);
         sendMessage(
             sender,
             setting.sectionTitle(),
@@ -651,10 +820,130 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             Component.text("Set ", BASE)
                 .append(highlight(setting.displayName(), setting.sectionColor()))
                 .append(Component.text(" to ", BASE))
-                .append(highlight(String.valueOf(clamped), setting.sectionColor()))
+                .append(highlight(setting.format(savedValue), setting.sectionColor()))
                 .append(Component.text(".", BASE))
         );
         return handleStatus(sender, label);
+    }
+
+    private boolean handleSettings(CommandSender sender, String label, String[] args) {
+        if (args.length < 2) {
+            sendDivider(sender);
+            sendMessage(sender, "Settings", CONTROLS, Component.text("Sections: ", BASE).append(settingSectionLinks(label)));
+            sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " get <setting>", CONTROLS, "Shows one current value."));
+            sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " explain <setting>", CONTROLS, "Shows details for one setting."));
+            sendDivider(sender);
+            return true;
+        }
+
+        String section = args[1].toLowerCase(Locale.ROOT);
+        List<ConfigSetting> settings = ConfigSetting.bySection(section);
+        if (settings.isEmpty()) {
+            sendError(sender, "Unknown settings section " + args[1] + ".");
+            return true;
+        }
+
+        OreveilConfig config = plugin.oreveilConfig();
+        sendDivider(sender);
+        for (ConfigSetting setting : settings) {
+            Object value = setting.read(config);
+            Component row = Component.text(setting.displayName() + ": ", BASE)
+                .append(highlight(setting.format(value), setting.sectionColor()))
+                .append(Component.text("  ", BASE))
+                .append(action(
+                    "/" + label + " explain " + setting.id(),
+                    "explain",
+                    MUTED,
+                    "Show valid values and config path."
+                ));
+            if (setting.type() == SettingType.BOOLEAN) {
+                row = row.append(Component.text("  ", BASE))
+                    .append(action(
+                        "/" + label + " toggle " + setting.id(),
+                        ((Boolean) value) ? "disable" : "enable",
+                        setting.sectionColor(),
+                        "Toggle " + setting.displayName().toLowerCase(Locale.ROOT) + "."
+                    ));
+            }
+            sendMessage(sender, setting.sectionTitle(), setting.sectionColor(), row);
+        }
+        sendDivider(sender);
+        return true;
+    }
+
+    private boolean handleGet(CommandSender sender, String label, String[] args) {
+        if (args.length < 2) {
+            sendError(sender, "Use /" + label + " get <setting>.");
+            return true;
+        }
+
+        ConfigSetting setting = ConfigSetting.fromId(args[1]);
+        if (setting == null) {
+            sendError(sender, "Unknown setting " + args[1] + ".");
+            return true;
+        }
+
+        Object value = setting.read(plugin.oreveilConfig());
+        sendMessage(
+            sender,
+            setting.sectionTitle(),
+            setting.sectionColor(),
+            Component.text(setting.displayName() + ": ", BASE)
+                .append(highlight(setting.format(value), setting.sectionColor()))
+                .append(Component.text("  Path: ", BASE))
+                .append(highlight(setting.path(), MUTED))
+        );
+        return true;
+    }
+
+    private boolean handleExplain(CommandSender sender, String label, String[] args) {
+        if (args.length < 2) {
+            sendError(sender, "Use /" + label + " explain <setting>.");
+            return true;
+        }
+
+        ConfigSetting setting = ConfigSetting.fromId(args[1]);
+        if (setting == null) {
+            sendError(sender, "Unknown setting " + args[1] + ".");
+            return true;
+        }
+
+        sendDivider(sender);
+        sendMessage(sender, setting.sectionTitle(), setting.sectionColor(), Component.text(setting.displayName(), setting.sectionColor()));
+        sendMessage(sender, setting.sectionTitle(), setting.sectionColor(), Component.text(setting.description(), BASE));
+        sendMessage(
+            sender,
+            setting.sectionTitle(),
+            setting.sectionColor(),
+            Component.text("Current: ", BASE)
+                .append(highlight(setting.format(setting.read(plugin.oreveilConfig())), setting.sectionColor()))
+                .append(Component.text("  Path: ", BASE))
+                .append(highlight(setting.path(), MUTED))
+        );
+        sendMessage(
+            sender,
+            setting.sectionTitle(),
+            setting.sectionColor(),
+            Component.text("Set with ", BASE)
+                .append(action(
+                    "/" + label + " set " + setting.id() + " " + setting.exampleValue(),
+                    "/" + label + " set " + setting.id() + " " + setting.exampleValue(),
+                    setting.sectionColor(),
+                    "Click to run an example value."
+                ))
+        );
+        sendDivider(sender);
+        return true;
+    }
+
+    private OreveilConfig applySetting(ConfigSetting setting, Object value) {
+        return switch (setting.type()) {
+            case BOOLEAN -> plugin.setBooleanSetting(setting.path(), (Boolean) value);
+            case INTEGER -> plugin.setIntegerSetting(setting.path(), (Integer) value);
+            case DOUBLE -> plugin.setDoubleSetting(setting.path(), (Double) value);
+            case LONG -> plugin.setNullableLongSetting(setting.path(), (Long) value);
+            case STRING, ENUM -> plugin.setStringSetting(setting.path(), (String) value);
+        };
     }
 
     private boolean handleTransport(CommandSender sender, String label, String[] args) {
@@ -719,6 +1008,114 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         sendDivider(sender);
     }
 
+    private void sendExposureStatus(CommandSender sender, String label) {
+        OreveilConfig config = plugin.oreveilConfig();
+        sendDivider(sender);
+        sendMessage(
+            sender,
+            "Exposure",
+            CONTROLS,
+            Component.text("Adjacent: ", BASE)
+                .append(highlight(String.valueOf(config.revealAdjacentMaterials().size()), CONTROLS))
+                .append(Component.text(" materials  ", BASE))
+                .append(action(
+                    "/" + label + " exposure adjacent add AIR",
+                    "add",
+                    CONTROLS,
+                    "Use /" + label + " exposure adjacent add <material>."
+                ))
+                .append(Component.text("  ", BASE))
+                .append(action(
+                    "/" + label + " exposure adjacent remove AIR",
+                    "remove",
+                    MUTED,
+                    "Use /" + label + " exposure adjacent remove <material>."
+                ))
+        );
+        sendMaterialPreview(sender, "Exposure", CONTROLS, config.revealAdjacentMaterials().stream().sorted(Comparator.comparing(Enum::name)).toList());
+        sendMessage(
+            sender,
+            "Exposure",
+            CONTROLS,
+            Component.text("Transparent: ", BASE)
+                .append(highlight(String.valueOf(config.revealTransparentMaterials().size()), CONTROLS))
+                .append(Component.text(" materials  ", BASE))
+                .append(action(
+                    "/" + label + " exposure transparent add GLASS",
+                    "add",
+                    CONTROLS,
+                    "Use /" + label + " exposure transparent add <material>."
+                ))
+                .append(Component.text("  ", BASE))
+                .append(action(
+                    "/" + label + " exposure transparent remove GLASS",
+                    "remove",
+                    MUTED,
+                    "Use /" + label + " exposure transparent remove <material>."
+                ))
+        );
+        sendMaterialPreview(sender, "Exposure", CONTROLS, config.revealTransparentMaterials().stream().sorted(Comparator.comparing(Enum::name)).toList());
+        sendDivider(sender);
+    }
+
+    private void sendHostStatus(CommandSender sender, String label) {
+        OreveilConfig config = plugin.oreveilConfig();
+        sendDivider(sender);
+        for (World.Environment environment : World.Environment.values()) {
+            Material material = config.resolveDimensionDefault(environment);
+            sendMessage(
+                sender,
+                "Host",
+                WORLD,
+                Component.text(environment.name() + ": ", BASE)
+                    .append(highlight(material.name(), WORLD))
+                    .append(Component.text("  ", BASE))
+                    .append(action(
+                        "/" + label + " host default " + environment.name() + " " + material.name(),
+                        "set",
+                        WORLD,
+                        "Use /" + label + " host default " + environment.name() + " <material>."
+                    ))
+            );
+        }
+        List<Material> overrides = config.oreOverridesView().keySet().stream().sorted(Comparator.comparing(Enum::name)).toList();
+        sendMessage(
+            sender,
+            "Host",
+            WORLD,
+            Component.text("Ore overrides: ", BASE)
+                .append(highlight(String.valueOf(overrides.size()), WORLD))
+                .append(Component.text("  ", BASE))
+                .append(action(
+                    "/" + label + " host override ANCIENT_DEBRIS NETHERRACK",
+                    "add",
+                    WORLD,
+                    "Use /" + label + " host override <ore> <material>."
+                ))
+        );
+        for (Material ore : overrides.stream().limit(8).toList()) {
+            Material host = config.resolveOreOverride(ore);
+            sendMessage(
+                sender,
+                "Host",
+                WORLD,
+                Component.text(ore.name() + ": ", BASE)
+                    .append(highlight(host.name(), WORLD))
+                    .append(Component.text("  ", BASE))
+                    .append(action(
+                        "/" + label + " host override " + ore.name() + " clear",
+                        "clear",
+                        MUTED,
+                        "Clear this ore-specific host override."
+                    ))
+            );
+        }
+        if (overrides.size() > 8) {
+            sendMessage(sender, "Host", WORLD, Component.text("Showing 8 of " + overrides.size() + " overrides.", BASE));
+        }
+        sendDivider(sender);
+    }
+
     private void sendHelp(CommandSender sender, String label) {
         sendDivider(sender);
         sendMessage(sender, "Oreveil", CONTROLS, Component.text("Command overview.", BASE));
@@ -726,8 +1123,14 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         sendMessage(sender, "Status", STATUS, commandLine("/" + label + " diagnostics", STATUS, "Shows packet rewrite and cache counters."));
         sendMessage(sender, "Status", STATUS, commandLine("/" + label + " inspect", STATUS, "Inspects the targeted block."));
         sendMessage(sender, "Ores", ORES, commandLine("/" + label + " ores", ORES, "Opens the clickable ore selector."));
+        sendMessage(sender, "Ores", ORES, commandLine("/" + label + " ore <add|remove|toggle> <ore>", ORES, "Edits protected ore materials."));
+        sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " exposure", CONTROLS, "Edits exposure material lists."));
+        sendMessage(sender, "World", WORLD, commandLine("/" + label + " host", WORLD, "Edits host block defaults and overrides."));
+        sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " settings [section]", CONTROLS, "Browses editable config compactly."));
+        sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " get <setting>", CONTROLS, "Shows one current config value."));
+        sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " explain <setting>", CONTROLS, "Explains one setting without dumping everything."));
         sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " toggle <setting>", CONTROLS, "Toggles a boolean setting."));
-        sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " set <setting> <value>", CONTROLS, "Sets a numeric setting."));
+        sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " set <setting> <value>", CONTROLS, "Sets an editable scalar setting."));
         sendMessage(sender, "Status", STATUS, commandLine("/" + label + " transport <mode>", STATUS, "Changes the active transport mode."));
         sendMessage(sender, "World", WORLD, commandLine("/" + label + " world status", WORLD, "Shows the managed world panel."));
         sendMessage(sender, "World", WORLD, commandLine("/" + label + " world tp <name>", WORLD, "Teleports you to a loaded world."));
@@ -802,7 +1205,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         sendDivider(sender);
     }
 
-    private Component toggleControl(ToggleSetting setting, boolean value, String label) {
+    private Component toggleControl(ConfigSetting setting, boolean value, String label) {
         return Component.text(setting.displayName() + ": ", BASE)
             .append(highlight(onOff(value), value ? setting.sectionColor() : MUTED))
             .append(Component.text("  ", BASE))
@@ -814,20 +1217,21 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             ));
     }
 
-    private Component numericControl(IntSetting setting, int value, String label) {
+    private Component numericControl(ConfigSetting setting, int value, String label) {
+        int step = (int) setting.step();
         return Component.text(setting.displayName() + ": ", BASE)
             .append(highlight(String.valueOf(value), setting.sectionColor()))
             .append(Component.text("  ", BASE))
             .append(action(
-                "/" + label + " set " + setting.id() + " " + setting.clamp(value - setting.step()),
-                "-" + setting.step(),
+                "/" + label + " set " + setting.id() + " " + setting.clamp(value - step),
+                "-" + step,
                 MUTED,
                 "Lower " + setting.displayName().toLowerCase(Locale.ROOT) + "."
             ))
             .append(Component.text(" ", BASE))
             .append(action(
-                "/" + label + " set " + setting.id() + " " + setting.clamp(value + setting.step()),
-                "+" + setting.step(),
+                "/" + label + " set " + setting.id() + " " + setting.clamp(value + step),
+                "+" + step,
                 setting.sectionColor(),
                 "Raise " + setting.displayName().toLowerCase(Locale.ROOT) + "."
             ))
@@ -838,6 +1242,22 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
                 setting.sectionColor(),
                 "Use /" + label + " set " + setting.id() + " <value> for a custom number."
             ));
+    }
+
+    private Component settingSectionLinks(String label) {
+        Component row = Component.empty();
+        for (String section : ConfigSetting.sectionIds()) {
+            if (!row.equals(Component.empty())) {
+                row = row.append(Component.text("  •  ", MUTED));
+            }
+            row = row.append(action(
+                "/" + label + " settings " + section,
+                section,
+                CONTROLS,
+                "Show " + section + " settings."
+            ));
+        }
+        return row;
     }
 
     private Component worldSummary(OreveilWorldGenerationConfig worldGeneration, String label) {
@@ -968,6 +1388,60 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         return Component.text(text, color)
             .clickEvent(ClickEvent.runCommand(command))
             .hoverEvent(HoverEvent.showText(Component.text(hover, BASE)));
+    }
+
+    private void sendMaterialPreview(CommandSender sender, String title, TextColor accent, List<Material> materials) {
+        String preview = materials.stream()
+            .limit(10)
+            .map(Enum::name)
+            .reduce((left, right) -> left + ", " + right)
+            .orElse("none");
+        if (materials.size() > 10) {
+            preview = preview + ", +" + (materials.size() - 10) + " more";
+        }
+        sendMessage(sender, title, accent, Component.text(preview, BASE));
+    }
+
+    private boolean isExposureList(String raw) {
+        return raw.equalsIgnoreCase("adjacent") || raw.equalsIgnoreCase("transparent");
+    }
+
+    private String exposurePath(String raw) {
+        return raw.equalsIgnoreCase("adjacent")
+            ? "exposure.reveal-adjacent-materials"
+            : "exposure.reveal-transparent-materials";
+    }
+
+    private boolean exposureContains(String raw, Material material) {
+        OreveilConfig config = plugin.oreveilConfig();
+        return raw.equalsIgnoreCase("adjacent")
+            ? config.revealAdjacentMaterials().contains(material)
+            : config.revealTransparentMaterials().contains(material);
+    }
+
+    private Material parseBlockMaterial(CommandSender sender, String raw) {
+        Material material = Material.matchMaterial(raw, false);
+        if (material == null || !material.isBlock()) {
+            sendError(sender, "Unknown block material " + raw + ".");
+            return null;
+        }
+        return material;
+    }
+
+    private World.Environment parseEnvironment(CommandSender sender, String raw) {
+        try {
+            return World.Environment.valueOf(raw.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ignored) {
+            sendError(sender, "Unknown world environment " + raw + ".");
+            return null;
+        }
+    }
+
+    private List<String> allBlockMaterialNames() {
+        return Arrays.stream(Material.values())
+            .filter(Material::isBlock)
+            .map(Enum::name)
+            .toList();
     }
 
     private List<String> teleportableWorldTargets() {
@@ -1113,155 +1587,346 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private enum ToggleSetting {
-        OBFUSCATION_ENABLED("obfuscation", "obfuscation.enabled", "Obfuscation", "World", WORLD) {
-            @Override
-            boolean read(OreveilConfig config) {
-                return config.obfuscationEnabled();
-            }
-        },
-        REVEAL_ON_EXPOSURE("reveal_on_exposure", "obfuscation.reveal-on-exposure", "Reveal On Exposure", "Controls", CONTROLS) {
-            @Override
-            boolean read(OreveilConfig config) {
-                return config.revealOnExposure();
-            }
-        },
+    private enum SettingType {
+        BOOLEAN,
+        INTEGER,
+        DOUBLE,
+        LONG,
+        STRING,
+        ENUM
+    }
+
+    private enum ConfigSetting {
+        OBFUSCATION_ENABLED(
+            "obfuscation",
+            "obfuscation.enabled",
+            "Obfuscation",
+            "World",
+            WORLD,
+            SettingType.BOOLEAN,
+            0,
+            0,
+            0,
+            List.of("on", "off"),
+            List.of(),
+            "Enables or disables Oreveil's runtime obfuscation layer.",
+            OreveilConfig::obfuscationEnabled
+        ),
+        REVEAL_ON_EXPOSURE(
+            "reveal_on_exposure",
+            "obfuscation.reveal-on-exposure",
+            "Reveal On Exposure",
+            "Controls",
+            CONTROLS,
+            SettingType.BOOLEAN,
+            0,
+            0,
+            0,
+            List.of("on", "off"),
+            List.of(),
+            "Controls whether protected ores become visible after normal gameplay exposes them.",
+            OreveilConfig::revealOnExposure
+        ),
         NON_OCCLUDING_REVEAL(
             "non_occluding_reveal",
             "obfuscation.reveal-next-to-non-occluding-blocks",
             "Non-Occluding Reveal",
             "Controls",
-            CONTROLS
-        ) {
-            @Override
-            boolean read(OreveilConfig config) {
-                return config.revealNextToNonOccludingBlocks();
-            }
-        },
-        SALTED_DISTRIBUTION("salted_distribution", "world-model.salted-distribution", "Salted Distribution", "World", WORLD) {
-            @Override
-            boolean read(OreveilConfig config) {
-                return config.saltedDistributionEnabled();
-            }
-        },
-        WORLD_GENERATION_ENABLED("world_generation", "world-generation.enabled", "World Generation", "World", WORLD) {
-            @Override
-            boolean read(OreveilConfig config) {
-                return config.worldGeneration().enabled();
-            }
-        };
+            CONTROLS,
+            SettingType.BOOLEAN,
+            0,
+            0,
+            0,
+            List.of("on", "off"),
+            List.of(),
+            "Treats non-occluding neighboring blocks as exposure sources.",
+            OreveilConfig::revealNextToNonOccludingBlocks
+        ),
+        LIVE_SYNC_RADIUS(
+            "live_sync_radius",
+            "obfuscation.live-sync-radius-blocks",
+            "Live Sync Radius",
+            "Controls",
+            CONTROLS,
+            SettingType.INTEGER,
+            16,
+            256,
+            16,
+            List.of("48", "64", "96"),
+            List.of(),
+            "Radius in blocks for live resync around players as exposure changes.",
+            OreveilConfig::liveSyncRadiusBlocks
+        ),
+        CHUNK_PRIME_RADIUS(
+            "chunk_prime_radius",
+            "obfuscation.initial-sync-chunk-radius",
+            "Chunk Prime Radius",
+            "Controls",
+            CONTROLS,
+            SettingType.INTEGER,
+            0,
+            8,
+            1,
+            List.of("0", "1", "2"),
+            List.of(),
+            "Chunk radius to prime around players when they join or change context.",
+            OreveilConfig::initialSyncChunkRadius
+        ),
+        REVEAL_PROXIMITY(
+            "reveal_proximity",
+            "obfuscation.reveal-proximity-blocks",
+            "Exposed Radius",
+            "Controls",
+            CONTROLS,
+            SettingType.INTEGER,
+            0,
+            96,
+            8,
+            List.of("32", "48", "64"),
+            List.of(),
+            "Fallback radius for refreshing exposed cave ores while players move.",
+            OreveilConfig::revealProximityBlocks
+        ),
+        SALTED_DISTRIBUTION(
+            "salted_distribution",
+            "world-model.salted-distribution",
+            "Salted Distribution",
+            "World",
+            WORLD,
+            SettingType.BOOLEAN,
+            0,
+            0,
+            0,
+            List.of("on", "off"),
+            List.of(),
+            "Enables server-private fake ore signals backed by the salt model.",
+            OreveilConfig::saltedDistributionEnabled
+        ),
+        SALT_DENSITY(
+            "salt_density",
+            "world-model.salt-density",
+            "Salt Density",
+            "World",
+            WORLD,
+            SettingType.INTEGER,
+            1,
+            256,
+            8,
+            List.of("32", "64", "96"),
+            List.of(),
+            "Number of salt placement attempts per chunk.",
+            OreveilConfig::saltDensity
+        ),
+        SALT_SECRET(
+            "salt_secret",
+            "world-model.salt-secret",
+            "Salt Secret",
+            "World",
+            WORLD,
+            SettingType.LONG,
+            Long.MIN_VALUE,
+            Long.MAX_VALUE,
+            1,
+            List.of("0", "123456789"),
+            List.of(),
+            "Server-private long used to make salted fake ore placement independent from the public seed.",
+            OreveilConfig::saltSecret
+        ),
+        WORLD_GENERATION_ENABLED(
+            "world_generation",
+            "world-generation.enabled",
+            "World Generation",
+            "World",
+            WORLD,
+            SettingType.BOOLEAN,
+            0,
+            0,
+            0,
+            List.of("on", "off"),
+            List.of(),
+            "Enables Oreveil's managed world generation features.",
+            config -> config.worldGeneration().enabled()
+        ),
+        WORLD_GENERATION_EXPERIMENTAL(
+            "world_experimental",
+            "world-generation.experimental",
+            "World Experimental",
+            "World",
+            WORLD,
+            SettingType.BOOLEAN,
+            0,
+            0,
+            0,
+            List.of("on", "off"),
+            List.of(),
+            "Allows experimental managed world generation behavior.",
+            config -> config.worldGeneration().experimental()
+        ),
+        WORLD_TARGET(
+            "world_target",
+            "world-generation.target-world",
+            "World Target",
+            "World",
+            WORLD,
+            SettingType.STRING,
+            0,
+            0,
+            0,
+            List.of("oreveil"),
+            List.of(),
+            "Name of the managed world Oreveil creates, regenerates, and targets.",
+            config -> config.worldGeneration().targetWorldName()
+        ),
+        WORLD_ENVIRONMENT(
+            "world_environment",
+            "world-generation.environment",
+            "World Environment",
+            "World",
+            WORLD,
+            SettingType.ENUM,
+            0,
+            0,
+            0,
+            List.of("NORMAL", "NETHER", "THE_END"),
+            List.of("NORMAL", "NETHER", "THE_END"),
+            "Bukkit environment used when creating the managed world.",
+            config -> config.worldGeneration().environment().name()
+        ),
+        WORLD_BACKUP_ON_REGENERATE(
+            "world_backup",
+            "world-generation.backup-on-regenerate",
+            "World Backup",
+            "World",
+            WORLD,
+            SettingType.BOOLEAN,
+            0,
+            0,
+            0,
+            List.of("on", "off"),
+            List.of(),
+            "Backs up the managed world folder before regeneration.",
+            config -> config.worldGeneration().backupOnRegenerate()
+        ),
+        WORLD_STRUCTURES(
+            "world_structures",
+            "world-generation.generate-structures",
+            "World Structures",
+            "World",
+            WORLD,
+            SettingType.BOOLEAN,
+            0,
+            0,
+            0,
+            List.of("on", "off"),
+            List.of(),
+            "Controls vanilla structure generation for the managed world.",
+            config -> config.worldGeneration().generateStructures()
+        ),
+        WORLD_SEED(
+            "world_seed",
+            "world-generation.seed",
+            "World Seed",
+            "World",
+            WORLD,
+            SettingType.LONG,
+            Long.MIN_VALUE,
+            Long.MAX_VALUE,
+            1,
+            List.of("random", "123456789"),
+            List.of(),
+            "Optional managed world seed. Use random to clear the configured seed.",
+            config -> config.worldGeneration().configuredSeed()
+        ),
+        ORE_REMIX_ATTEMPTS(
+            "ore_remix_attempts",
+            "world-generation.ore-remix-attempts-per-chunk",
+            "Ore Remix Attempts",
+            "World",
+            WORLD,
+            SettingType.INTEGER,
+            0,
+            128,
+            4,
+            List.of("12", "18", "24"),
+            List.of(),
+            "Number of managed-world ore remix attempts per chunk.",
+            config -> config.worldGeneration().oreRemixAttemptsPerChunk()
+        ),
+        TERRAIN_TWEAK_ATTEMPTS(
+            "terrain_tweak_attempts",
+            "world-generation.terrain-adjustment-attempts-per-chunk",
+            "Terrain Tweak Attempts",
+            "World",
+            WORLD,
+            SettingType.INTEGER,
+            0,
+            64,
+            2,
+            List.of("4", "8", "12"),
+            List.of(),
+            "Number of managed-world terrain adjustment attempts per chunk.",
+            config -> config.worldGeneration().terrainAdjustmentAttemptsPerChunk()
+        ),
+        RUIN_FRAGMENT_CHANCE(
+            "ruin_fragment_chance",
+            "world-generation.ruin-fragment-chance",
+            "Ruin Fragment Chance",
+            "World",
+            WORLD,
+            SettingType.DOUBLE,
+            0.0D,
+            1.0D,
+            0.01D,
+            List.of("0.0", "0.02", "0.05"),
+            List.of(),
+            "Chance from 0.0 to 1.0 for ruin fragments during managed world generation.",
+            config -> config.worldGeneration().ruinFragmentChance()
+        );
+
+        private static final Object INVALID_VALUE = new Object();
 
         private final String id;
         private final String path;
         private final String displayName;
         private final String sectionTitle;
         private final TextColor sectionColor;
+        private final SettingType type;
+        private final double min;
+        private final double max;
+        private final double step;
+        private final List<String> suggestions;
+        private final List<String> options;
+        private final String description;
+        private final Function<OreveilConfig, Object> reader;
 
-        ToggleSetting(String id, String path, String displayName, String sectionTitle, TextColor sectionColor) {
-            this.id = id;
-            this.path = path;
-            this.displayName = displayName;
-            this.sectionTitle = sectionTitle;
-            this.sectionColor = sectionColor;
-        }
-
-        String id() {
-            return id;
-        }
-
-        String path() {
-            return path;
-        }
-
-        String displayName() {
-            return displayName;
-        }
-
-        String sectionTitle() {
-            return sectionTitle;
-        }
-
-        TextColor sectionColor() {
-            return sectionColor;
-        }
-
-        abstract boolean read(OreveilConfig config);
-
-        static ToggleSetting fromId(String raw) {
-            for (ToggleSetting value : values()) {
-                if (value.id.equalsIgnoreCase(raw)) {
-                    return value;
-                }
-            }
-            return null;
-        }
-    }
-
-    private enum IntSetting {
-        LIVE_SYNC_RADIUS("live_sync_radius", "obfuscation.live-sync-radius-blocks", "Live Sync Radius", "Controls", CONTROLS, 16, 256, 16) {
-            @Override
-            List<String> suggestions() {
-                return List.of("48", "64", "96");
-            }
-        },
-        CHUNK_PRIME_RADIUS("chunk_prime_radius", "obfuscation.initial-sync-chunk-radius", "Chunk Prime Radius", "Controls", CONTROLS, 0, 8, 1) {
-            @Override
-            List<String> suggestions() {
-                return List.of("0", "1", "2");
-            }
-        },
-        REVEAL_PROXIMITY("reveal_proximity", "obfuscation.reveal-proximity-blocks", "Exposed Radius", "Controls", CONTROLS, 0, 96, 8) {
-            @Override
-            List<String> suggestions() {
-                return List.of("32", "48", "64");
-            }
-        },
-        SALT_DENSITY("salt_density", "world-model.salt-density", "Salt Density", "World", WORLD, 1, 256, 8) {
-            @Override
-            List<String> suggestions() {
-                return List.of("32", "64", "96");
-            }
-        },
-        ORE_REMIX_ATTEMPTS("ore_remix_attempts", "world-generation.ore-remix-attempts-per-chunk", "Ore Remix Attempts", "World", WORLD, 0, 128, 4) {
-            @Override
-            List<String> suggestions() {
-                return List.of("12", "18", "24");
-            }
-        },
-        TERRAIN_TWEAK_ATTEMPTS("terrain_tweak_attempts", "world-generation.terrain-adjustment-attempts-per-chunk", "Terrain Tweak Attempts", "World", WORLD, 0, 64, 2) {
-            @Override
-            List<String> suggestions() {
-                return List.of("4", "8", "12");
-            }
-        };
-
-        private final String id;
-        private final String path;
-        private final String displayName;
-        private final String sectionTitle;
-        private final TextColor sectionColor;
-        private final int min;
-        private final int max;
-        private final int step;
-
-        IntSetting(
+        ConfigSetting(
             String id,
             String path,
             String displayName,
             String sectionTitle,
             TextColor sectionColor,
-            int min,
-            int max,
-            int step
+            SettingType type,
+            double min,
+            double max,
+            double step,
+            List<String> suggestions,
+            List<String> options,
+            String description,
+            Function<OreveilConfig, Object> reader
         ) {
             this.id = id;
             this.path = path;
             this.displayName = displayName;
             this.sectionTitle = sectionTitle;
             this.sectionColor = sectionColor;
+            this.type = type;
             this.min = min;
             this.max = max;
             this.step = step;
+            this.suggestions = suggestions;
+            this.options = options;
+            this.description = description;
+            this.reader = reader;
         }
 
         String id() {
@@ -1284,23 +1949,145 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             return sectionColor;
         }
 
-        int step() {
+        SettingType type() {
+            return type;
+        }
+
+        double step() {
             return step;
         }
 
-        int clamp(int value) {
-            return Math.max(min, Math.min(max, value));
+        String description() {
+            return description;
         }
 
-        abstract List<String> suggestions();
+        Object read(OreveilConfig config) {
+            return reader.apply(config);
+        }
 
-        static IntSetting fromId(String raw) {
-            for (IntSetting value : values()) {
+        List<String> suggestions() {
+            return suggestions;
+        }
+
+        int clamp(int value) {
+            return (int) Math.max(min, Math.min(max, value));
+        }
+
+        String exampleValue() {
+            return suggestions.isEmpty() ? formatDefaultExample() : suggestions.get(0);
+        }
+
+        String format(Object value) {
+            if (value == null) {
+                return "random";
+            }
+            if (value instanceof Boolean booleanValue) {
+                return booleanValue ? "on" : "off";
+            }
+            return String.valueOf(value);
+        }
+
+        Object parse(String raw) {
+            return switch (type) {
+                case BOOLEAN -> parseBoolean(raw);
+                case INTEGER -> parseInteger(raw);
+                case DOUBLE -> parseDouble(raw);
+                case LONG -> parseLong(raw);
+                case STRING -> raw.isBlank() ? INVALID_VALUE : raw;
+                case ENUM -> parseEnum(raw);
+            };
+        }
+
+        private Object parseBoolean(String raw) {
+            return switch (raw.toLowerCase(Locale.ROOT)) {
+                case "true", "on", "yes", "enable", "enabled" -> true;
+                case "false", "off", "no", "disable", "disabled" -> false;
+                default -> INVALID_VALUE;
+            };
+        }
+
+        private Object parseInteger(String raw) {
+            try {
+                return clamp(Integer.parseInt(raw));
+            } catch (NumberFormatException ignored) {
+                return INVALID_VALUE;
+            }
+        }
+
+        private Object parseDouble(String raw) {
+            try {
+                double value = Double.parseDouble(raw);
+                return Math.max(min, Math.min(max, value));
+            } catch (NumberFormatException ignored) {
+                return INVALID_VALUE;
+            }
+        }
+
+        private Object parseLong(String raw) {
+            if (this == WORLD_SEED && raw.equalsIgnoreCase("random")) {
+                return null;
+            }
+            try {
+                return Long.parseLong(raw);
+            } catch (NumberFormatException ignored) {
+                return INVALID_VALUE;
+            }
+        }
+
+        private Object parseEnum(String raw) {
+            for (String option : options) {
+                if (option.equalsIgnoreCase(raw)) {
+                    return option;
+                }
+            }
+            return INVALID_VALUE;
+        }
+
+        private String formatDefaultExample() {
+            return switch (type) {
+                case BOOLEAN -> "on";
+                case INTEGER -> String.valueOf((int) min);
+                case DOUBLE -> String.valueOf(min);
+                case LONG -> "0";
+                case STRING -> "value";
+                case ENUM -> options.isEmpty() ? "value" : options.get(0);
+            };
+        }
+
+        static ConfigSetting fromId(String raw) {
+            for (ConfigSetting value : values()) {
                 if (value.id.equalsIgnoreCase(raw)) {
                     return value;
                 }
             }
             return null;
+        }
+
+        static List<ConfigSetting> booleanSettings() {
+            return Arrays.stream(values())
+                .filter(setting -> setting.type == SettingType.BOOLEAN)
+                .toList();
+        }
+
+        static List<String> settingIds() {
+            return Arrays.stream(values())
+                .map(ConfigSetting::id)
+                .sorted()
+                .toList();
+        }
+
+        static List<String> sectionIds() {
+            return Arrays.stream(values())
+                .map(setting -> setting.sectionTitle.toLowerCase(Locale.ROOT))
+                .distinct()
+                .sorted()
+                .toList();
+        }
+
+        static List<ConfigSetting> bySection(String section) {
+            return Arrays.stream(values())
+                .filter(setting -> setting.sectionTitle.equalsIgnoreCase(section))
+                .toList();
         }
     }
 }

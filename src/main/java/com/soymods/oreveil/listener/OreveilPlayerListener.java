@@ -13,7 +13,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.plugin.Plugin;
@@ -43,19 +42,12 @@ public final class OreveilPlayerListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
-    public void onQuit(PlayerQuitEvent event) {
-        obfuscationService.clearPlayerVisibility(event.getPlayer());
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
     public void onRespawn(PlayerRespawnEvent event) {
-        obfuscationService.clearPlayerVisibility(event.getPlayer());
         schedulePrime(event.getPlayer(), event.getRespawnLocation(), 10L);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onWorldChange(PlayerChangedWorldEvent event) {
-        obfuscationService.clearPlayerVisibility(event.getPlayer());
         schedulePrime(event.getPlayer(), event.getPlayer().getLocation(), 10L);
     }
 
