@@ -13,6 +13,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.plugin.Plugin;
@@ -39,6 +40,11 @@ public final class OreveilPlayerListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
         schedulePrime(event.getPlayer(), event.getPlayer().getLocation(), 10L);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onQuit(PlayerQuitEvent event) {
+        obfuscationService.clearPlayerVisibility(event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -74,15 +80,7 @@ public final class OreveilPlayerListener implements Listener {
             return;
         }
 
-        OreveilConfig config = configSupplier.get();
-        if (config.revealProximityBlocks() <= 0) {
-            return;
-        }
-
-        int step = Math.max(2, Math.min(4, config.revealProximityBlocks() / 2));
-        if (Math.abs(event.getFrom().getBlockX() - event.getTo().getBlockX()) < step
-            && Math.abs(event.getFrom().getBlockY() - event.getTo().getBlockY()) < step
-            && Math.abs(event.getFrom().getBlockZ() - event.getTo().getBlockZ()) < step) {
+        if (configSupplier.get().revealProximityBlocks() <= 0) {
             return;
         }
 

@@ -8,7 +8,10 @@ import com.soymods.oreveil.util.BlockNeighborhoods;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
@@ -28,6 +31,7 @@ public final class NetworkObfuscationService {
     private final ObfuscationMetrics metrics;
     private ObfuscationTransport transport;
     private final Plugin plugin;
+    private final Map<UUID, Set<RevealedBlockKey>> revealedExposedOresByPlayer = new ConcurrentHashMap<>();
 
     public NetworkObfuscationService(
         Plugin plugin,
@@ -105,11 +109,21 @@ public final class NetworkObfuscationService {
 
         if (config.revealOnExposure() && exposureService.isLegitimatelyExposed(block)) {
             int radius = config.revealProximityBlocks();
-            if (radius <= 0 || (viewer != null && isWithinDistance(viewer, block, radius))) {
+            if (radius <= 0) {
+                return block.getType();
+            }
+            if (viewer != null && isWithinDistance(viewer, block, radius)) {
+                rememberRevealedOre(viewer, block);
+                return block.getType();
+            }
+            if (viewer != null && isRecentlyRevealedOre(viewer, block, radius + config.revealHysteresisBlocks())) {
                 return block.getType();
             }
         }
 
+        if (viewer != null) {
+            forgetRevealedOre(viewer, block);
+        }
         return hostBlockResolver.resolve(block, config);
     }
 
@@ -182,11 +196,17 @@ public final class NetworkObfuscationService {
         transport.syncBlockToPlayer(player, block, this::getClientVisibleMaterial);
     }
 
+    public void clearPlayerVisibility(Player player) {
+        revealedExposedOresByPlayer.remove(player.getUniqueId());
+    }
+
     public void syncNearbyExposedOres(Player player) {
         int radius = config.revealProximityBlocks();
         if (radius <= 0) {
             return;
         }
+
+        syncPreviouslyRevealedOres(player);
 
         World world = player.getWorld();
         Location origin = player.getLocation();
@@ -207,6 +227,56 @@ public final class NetworkObfuscationService {
                     transport.syncBlockToPlayer(player, block, this::getClientVisibleMaterial);
                 }
             }
+        }
+    }
+
+    private void syncPreviouslyRevealedOres(Player player) {
+        Set<RevealedBlockKey> revealed = revealedExposedOresByPlayer.get(player.getUniqueId());
+        if (revealed == null || revealed.isEmpty()) {
+            return;
+        }
+
+        World world = player.getWorld();
+        for (RevealedBlockKey key : List.copyOf(revealed)) {
+            if (!key.worldId().equals(world.getUID())) {
+                revealed.remove(key);
+                continue;
+            }
+            if (!world.isChunkLoaded(key.x() >> 4, key.z() >> 4)) {
+                revealed.remove(key);
+                continue;
+            }
+            Block block = world.getBlockAt(key.x(), key.y(), key.z());
+            transport.syncBlockToPlayer(player, block, this::getClientVisibleMaterial);
+        }
+    }
+
+    private void rememberRevealedOre(Player player, Block block) {
+        revealedExposedOresByPlayer
+            .computeIfAbsent(player.getUniqueId(), ignored -> ConcurrentHashMap.newKeySet())
+            .add(RevealedBlockKey.from(block));
+    }
+
+    private boolean isRecentlyRevealedOre(Player player, Block block, int hideRadius) {
+        Set<RevealedBlockKey> revealed = revealedExposedOresByPlayer.get(player.getUniqueId());
+        if (revealed == null || !revealed.contains(RevealedBlockKey.from(block))) {
+            return false;
+        }
+        if (isWithinDistance(player, block, hideRadius)) {
+            return true;
+        }
+        forgetRevealedOre(player, block);
+        return false;
+    }
+
+    private void forgetRevealedOre(Player player, Block block) {
+        Set<RevealedBlockKey> revealed = revealedExposedOresByPlayer.get(player.getUniqueId());
+        if (revealed == null) {
+            return;
+        }
+        revealed.remove(RevealedBlockKey.from(block));
+        if (revealed.isEmpty()) {
+            revealedExposedOresByPlayer.remove(player.getUniqueId());
         }
     }
 
@@ -335,5 +405,16 @@ public final class NetworkObfuscationService {
         }
 
         return hostBlockResolver.resolve(block, config);
+    }
+
+    private record RevealedBlockKey(UUID worldId, int x, int y, int z) {
+        private static RevealedBlockKey from(Block block) {
+            return new RevealedBlockKey(
+                block.getWorld().getUID(),
+                block.getX(),
+                block.getY(),
+                block.getZ()
+            );
+        }
     }
 }

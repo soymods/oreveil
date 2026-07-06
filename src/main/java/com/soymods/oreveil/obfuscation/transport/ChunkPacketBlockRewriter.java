@@ -2,11 +2,11 @@ package com.soymods.oreveil.obfuscation.transport;
 
 import com.comphenix.protocol.utility.MinecraftReflection;
 import com.comphenix.protocol.wrappers.WrappedBlockData;
-import com.comphenix.protocol.wrappers.WrappedRegistry;
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.obfuscation.HostBlockResolver;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import java.io.ByteArrayOutputStream;
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -20,12 +20,20 @@ final class ChunkPacketBlockRewriter {
     private static final int BIOME_MIN_INDIRECT_BITS = 1;
     private static final int BIOME_DIRECT_BITS = 6;
 
-    private final AuthoritativeWorldModel worldModel;
+    private final ChunkEntryProvider chunkEntryProvider;
     private final HostBlockResolver hostBlockResolver = new HostBlockResolver();
-    private final BlockStateIdResolver stateIds = new BlockStateIdResolver();
+    private final StateIdResolver stateIds;
 
     ChunkPacketBlockRewriter(AuthoritativeWorldModel worldModel) {
-        this.worldModel = worldModel;
+        this(
+            new WorldModelChunkEntryProvider(worldModel),
+            new ProtocolLibStateIdResolver()
+        );
+    }
+
+    ChunkPacketBlockRewriter(ChunkEntryProvider chunkEntryProvider, StateIdResolver stateIds) {
+        this.chunkEntryProvider = chunkEntryProvider;
+        this.stateIds = stateIds;
     }
 
     RewriteResult rewrite(
@@ -38,8 +46,8 @@ final class ChunkPacketBlockRewriter {
         int maxHeight,
         OreveilConfig config
     ) {
-        Map<Integer, Material> protectedOres = worldModel.getProtectedOreEntriesInChunk(worldId, chunkX, chunkZ);
-        Map<Integer, Material> salt = worldModel.getSaltEntriesInChunk(worldId, chunkX, chunkZ);
+        Map<Integer, Material> protectedOres = chunkEntryProvider.protectedOreEntries(worldId, chunkX, chunkZ);
+        Map<Integer, Material> salt = chunkEntryProvider.saltEntries(worldId, chunkX, chunkZ);
         if (protectedOres.isEmpty() && salt.isEmpty()) {
             return RewriteResult.unchanged();
         }
@@ -388,12 +396,35 @@ final class ChunkPacketBlockRewriter {
         }
     }
 
-    private static final class BlockStateIdResolver {
+    interface ChunkEntryProvider {
+        Map<Integer, Material> protectedOreEntries(UUID worldId, int chunkX, int chunkZ);
+
+        Map<Integer, Material> saltEntries(UUID worldId, int chunkX, int chunkZ);
+    }
+
+    interface StateIdResolver {
+        Integer idFor(Material material);
+    }
+
+    private record WorldModelChunkEntryProvider(AuthoritativeWorldModel worldModel) implements ChunkEntryProvider {
+        @Override
+        public Map<Integer, Material> protectedOreEntries(UUID worldId, int chunkX, int chunkZ) {
+            return worldModel.getProtectedOreEntriesInChunk(worldId, chunkX, chunkZ);
+        }
+
+        @Override
+        public Map<Integer, Material> saltEntries(UUID worldId, int chunkX, int chunkZ) {
+            return worldModel.getSaltEntriesInChunk(worldId, chunkX, chunkZ);
+        }
+    }
+
+    private static final class ProtocolLibStateIdResolver implements StateIdResolver {
         private final Map<Material, Integer> cache = new HashMap<>();
-        private WrappedRegistry registry;
+        private Method blockStateIdMethod;
         private boolean unavailable;
 
-        Integer idFor(Material material) {
+        @Override
+        public Integer idFor(Material material) {
             if (unavailable) {
                 return null;
             }
@@ -402,13 +433,13 @@ final class ChunkPacketBlockRewriter {
 
         private Integer resolve(Material material) {
             try {
-                if (registry == null) {
-                    registry = WrappedRegistry.getRegistry(MinecraftReflection.getIBlockDataClass());
-                }
                 Object handle = WrappedBlockData.createData(material).getHandle();
-                int id = registry.getId(handle);
+                if (blockStateIdMethod == null) {
+                    blockStateIdMethod = MinecraftReflection.getBlockClass().getMethod("getId", handle.getClass());
+                }
+                int id = (Integer) blockStateIdMethod.invoke(null, handle);
                 return id < 0 ? null : id;
-            } catch (RuntimeException exception) {
+            } catch (ReflectiveOperationException | RuntimeException exception) {
                 unavailable = true;
                 return null;
             }

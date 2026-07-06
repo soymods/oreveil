@@ -252,7 +252,12 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
         int chunkZ = packet.getIntegers().read(1);
         Player player = event.getPlayer();
 
-        Bukkit.getScheduler().runTask(plugin, () -> {
+        scheduleChunkPrime(player, chunkX, chunkZ, 1L);
+        scheduleChunkPrime(player, chunkX, chunkZ, 4L);
+    }
+
+    private void scheduleChunkPrime(Player player, int chunkX, int chunkZ, long delayTicks) {
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (!player.isOnline()) {
                 return;
             }
@@ -265,24 +270,20 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
             Chunk chunk = world.getChunkAt(chunkX, chunkZ);
             primeChunkToPlayer(player, chunk);
             metrics.recordChunkPacketPrimed();
-        });
+        }, delayTicks);
     }
 
     private void primeChunkToPlayer(Player player, Chunk chunk) {
         for (Block block : worldModel.getProtectedOreBlocksInChunk(chunk)) {
             Material visibleMaterial = materialResolver.apply(block, player);
-            if (visibleMaterial != block.getType()) {
-                fallback.syncBlockToPlayer(player, block, (b, p) -> visibleMaterial);
-                metrics.recordChunkPrimeCorrection();
-            }
+            fallback.syncBlockToPlayer(player, block, (b, p) -> visibleMaterial);
+            metrics.recordChunkPrimeCorrection();
         }
 
         for (Block block : worldModel.getSaltBlocksInChunk(chunk)) {
             Material visibleMaterial = materialResolver.apply(block, player);
-            if (visibleMaterial != block.getType()) {
-                fallback.syncBlockToPlayer(player, block, (b, p) -> visibleMaterial);
-                metrics.recordChunkPrimeCorrection();
-            }
+            fallback.syncBlockToPlayer(player, block, (b, p) -> visibleMaterial);
+            metrics.recordChunkPrimeCorrection();
         }
     }
 }

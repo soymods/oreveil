@@ -39,6 +39,7 @@ public final class OreveilConfigLoader {
             config.getBoolean("obfuscation.reveal-on-exposure", true),
             config.getBoolean("obfuscation.reveal-next-to-non-occluding-blocks", true),
             Math.max(0, config.getInt("obfuscation.reveal-proximity-blocks", 6)),
+            Math.max(0, config.getInt("obfuscation.reveal-hysteresis-blocks", 4)),
             Math.max(16, config.getInt("obfuscation.live-sync-radius-blocks", 64)),
             Math.max(0, config.getInt("obfuscation.initial-sync-chunk-radius", 0)),
             config.getBoolean("world-model.salted-distribution", false),

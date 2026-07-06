@@ -7,6 +7,9 @@ obfuscation:
   # (including X-ray users) continues to see the obfuscated material.
   # Set to 0 to reveal all exposed ores globally (old behaviour, weaker against X-ray).
   reveal-proximity-blocks: 6
+  # Extra distance before an already revealed exposed ore is hidden again.
+  # This prevents visible pop-in/pop-out when walking along the reveal boundary.
+  reveal-hysteresis-blocks: 4
   live-sync-radius-blocks: 64
   initial-sync-chunk-radius: 0
 

@@ -23,6 +23,12 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:${property("paper_api_version")}")
     compileOnly("net.dmulloy2:ProtocolLib:5.4.0")
+
+    testImplementation(platform("org.junit:junit-bom:5.10.3"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("io.papermc.paper:paper-api:${property("paper_api_version")}")
+    testImplementation("net.dmulloy2:ProtocolLib:5.4.0")
 }
 
 tasks.processResources {
@@ -41,6 +47,10 @@ tasks.processResources {
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     options.release.set(21)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 tasks.jar {

@@ -104,6 +104,37 @@ cd oreveil
 
 Artifacts are written to `build/libs/`.
 
+### One-Command Dev Server
+
+Use the dev-server script to build Oreveil, provision a disposable Paper server under `build/dev-server/`, install ProtocolLib, copy the plugin jar, accept the EULA, and start the server:
+
+```bash
+node scripts/dev-server.mjs
+```
+
+Then join `localhost:25565` from a Minecraft `1.21.4` client. To auto-op your offline-mode test player on first setup:
+
+```bash
+MC_USERNAME=YourName node scripts/dev-server.mjs
+```
+
+For edit/test loops, use watch mode. It rebuilds, redeploys, stops the current dev server, and starts it again when source files change:
+
+```bash
+node scripts/dev-server.mjs --watch
+```
+
+Useful options:
+
+- `--reset-world`: delete the disposable `world`, `world_nether`, and `world_the_end` folders before starting.
+- `--no-build`: skip Gradle build and deploy the existing jar.
+- `--prepare-only`: download/provision the dev server and deploy the jar, then exit without starting Paper.
+- `PAPER_VERSION=<version>`: run a different Paper/Minecraft version than `gradle.properties`.
+- `PAPER_URL=<url>`: use a specific Paper server jar URL instead of the Paper downloads API.
+- `PROTOCOLLIB_URL=<url>`: override the default ProtocolLib download URL.
+
+In game, run `/oreveil diagnostics` after joining and moving around. For chunk-packet testing, confirm that chunk rewrite packet/entry counters increase and failures stay at `0`.
+
 ### Project Layout
 
 - `src/main/java/com/soymods/oreveil/bootstrap/`: plugin bootstrap
