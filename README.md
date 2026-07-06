@@ -82,9 +82,70 @@ The goal is to reduce adversarial clients back to standard survival constraints 
 Oreveil is designed to be manageable both from configuration files and in-game administration commands.
 
 - Use config-driven policies for protected ores, exposure rules, host block mapping, and transport behavior.
+- Use `/oreveil status` for the compact live control panel.
+- Use `/oreveil help <topic>` for focused command examples. Topics include `settings`, `exposure`, `host`, `ores`, `world`, and `diagnostics`.
 - Use `/oreveil reload` to apply rule changes without restarting the server.
 - Use `/oreveil inspect` to inspect how a targeted block is currently classified and presented to the client.
 - Use `/oreveil diagnostics` to inspect packet rewrite counters, chunk priming counters, and cached ore/salt index sizes.
+
+### Command Examples
+
+Compact status and inspection:
+
+```mcfunction
+/oreveil status
+/oreveil inspect
+/oreveil diagnostics
+```
+
+Editable scalar settings:
+
+```mcfunction
+/oreveil settings
+/oreveil settings controls
+/oreveil get live_sync_radius
+/oreveil explain salt_density
+/oreveil set live_sync_radius 96
+/oreveil toggle reveal_on_exposure
+```
+
+Protected ores:
+
+```mcfunction
+/oreveil ores
+/oreveil ore add DIAMOND_ORE
+/oreveil ore remove COPPER_ORE
+/oreveil ore toggle ANCIENT_DEBRIS
+```
+
+Exposure rules:
+
+```mcfunction
+/oreveil exposure
+/oreveil exposure adjacent add WATER
+/oreveil exposure adjacent remove LAVA
+/oreveil exposure transparent toggle GLASS
+```
+
+Host block mapping:
+
+```mcfunction
+/oreveil host
+/oreveil host default NORMAL STONE
+/oreveil host default NETHER NETHERRACK
+/oreveil host override ANCIENT_DEBRIS NETHERRACK
+/oreveil host override DIAMOND_ORE clear
+```
+
+Managed world tools:
+
+```mcfunction
+/oreveil world status
+/oreveil world target oreveil
+/oreveil world seed random
+/oreveil world create
+/oreveil world regenerate confirm
+```
 
 ## Compatibility
 

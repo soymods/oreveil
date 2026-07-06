@@ -51,13 +51,13 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
-            sendHelp(sender, label);
+            sendHelp(sender, label, args);
             return true;
         }
 
         return switch (args[0].toLowerCase(Locale.ROOT)) {
             case "help" -> {
-                sendHelp(sender, label);
+                sendHelp(sender, label, args);
                 yield true;
             }
             case "reload" -> handleReload(sender);
@@ -106,6 +106,9 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
                 "transport",
                 "world"
             ));
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("help")) {
+            return filter(args[1], List.of("settings", "exposure", "host", "ores", "world", "diagnostics"));
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("ore")) {
             return filter(args[1], List.of("add", "remove", "toggle"));
@@ -1116,7 +1119,12 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         sendDivider(sender);
     }
 
-    private void sendHelp(CommandSender sender, String label) {
+    private void sendHelp(CommandSender sender, String label, String[] args) {
+        if (args.length >= 2) {
+            sendHelpTopic(sender, label, args[1]);
+            return;
+        }
+
         sendDivider(sender);
         sendMessage(sender, "Oreveil", CONTROLS, Component.text("Command overview.", BASE));
         sendMessage(sender, "Status", STATUS, commandLine("/" + label + " status", STATUS, "Shows the live control panel."));
@@ -1136,7 +1144,84 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         sendMessage(sender, "World", WORLD, commandLine("/" + label + " world tp <name>", WORLD, "Teleports you to a loaded world."));
         sendMessage(sender, "World", WORLD, commandLine("/" + label + " world delete [name]", WORLD, "Picks a world and asks before deleting it."));
         sendMessage(sender, "World", WORLD, commandLine("/" + label + " world default <name>", WORLD, "Sets the server default world for the next restart."));
+        sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " help <topic>", CONTROLS, "Shows focused examples."));
         sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " reload", CONTROLS, "Reloads config and runtime state."));
+        sendDivider(sender);
+    }
+
+    private void sendHelpTopic(CommandSender sender, String label, String rawTopic) {
+        switch (rawTopic.toLowerCase(Locale.ROOT)) {
+            case "settings" -> sendSettingsHelp(sender, label);
+            case "exposure" -> sendExposureHelp(sender, label);
+            case "host" -> sendHostHelp(sender, label);
+            case "ores", "ore" -> sendOresHelp(sender, label);
+            case "world" -> sendWorldHelp(sender, label);
+            case "diagnostics", "diag" -> sendDiagnosticsHelp(sender, label);
+            default -> {
+                sendError(sender, "Unknown help topic " + rawTopic + ".");
+                sendMessage(sender, "Oreveil", CONTROLS, Component.text("Topics: settings, exposure, host, ores, world, diagnostics.", BASE));
+            }
+        }
+    }
+
+    private void sendSettingsHelp(CommandSender sender, String label) {
+        sendDivider(sender);
+        sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " settings", CONTROLS, "Lists editable setting sections."));
+        sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " settings controls", CONTROLS, "Shows compact controls for sync and reveal settings."));
+        sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " settings world", WORLD, "Shows compact controls for world-model and managed-world settings."));
+        sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " get live_sync_radius", CONTROLS, "Shows one current value and config path."));
+        sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " explain salt_density", CONTROLS, "Shows one setting's meaning and example command."));
+        sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " set live_sync_radius 96", CONTROLS, "Sets one scalar value."));
+        sendDivider(sender);
+    }
+
+    private void sendExposureHelp(CommandSender sender, String label) {
+        sendDivider(sender);
+        sendMessage(sender, "Exposure", CONTROLS, commandLine("/" + label + " exposure", CONTROLS, "Shows adjacent and transparent material counts."));
+        sendMessage(sender, "Exposure", CONTROLS, commandLine("/" + label + " exposure adjacent add WATER", CONTROLS, "Makes a neighboring material reveal protected ore."));
+        sendMessage(sender, "Exposure", CONTROLS, commandLine("/" + label + " exposure adjacent remove LAVA", CONTROLS, "Removes a neighboring reveal material."));
+        sendMessage(sender, "Exposure", CONTROLS, commandLine("/" + label + " exposure transparent toggle GLASS", CONTROLS, "Toggles a transparent reveal material."));
+        sendMessage(sender, "Exposure", CONTROLS, commandLine("/" + label + " toggle non_occluding_reveal", CONTROLS, "Toggles the broader non-occluding rule."));
+        sendDivider(sender);
+    }
+
+    private void sendHostHelp(CommandSender sender, String label) {
+        sendDivider(sender);
+        sendMessage(sender, "Host", WORLD, commandLine("/" + label + " host", WORLD, "Shows dimension defaults and ore override count."));
+        sendMessage(sender, "Host", WORLD, commandLine("/" + label + " host default NORMAL STONE", WORLD, "Sets the Overworld fallback host block."));
+        sendMessage(sender, "Host", WORLD, commandLine("/" + label + " host default NETHER NETHERRACK", WORLD, "Sets the Nether fallback host block."));
+        sendMessage(sender, "Host", WORLD, commandLine("/" + label + " host override ANCIENT_DEBRIS NETHERRACK", WORLD, "Sets an ore-specific host block."));
+        sendMessage(sender, "Host", WORLD, commandLine("/" + label + " host override DIAMOND_ORE clear", WORLD, "Removes an ore-specific override."));
+        sendDivider(sender);
+    }
+
+    private void sendOresHelp(CommandSender sender, String label) {
+        sendDivider(sender);
+        sendMessage(sender, "Ores", ORES, commandLine("/" + label + " ores", ORES, "Opens the clickable ore selector."));
+        sendMessage(sender, "Ores", ORES, commandLine("/" + label + " ore add DIAMOND_ORE", ORES, "Starts hiding an ore material."));
+        sendMessage(sender, "Ores", ORES, commandLine("/" + label + " ore remove COPPER_ORE", ORES, "Stops hiding an ore material."));
+        sendMessage(sender, "Ores", ORES, commandLine("/" + label + " ore toggle ANCIENT_DEBRIS", ORES, "Toggles one ore material."));
+        sendDivider(sender);
+    }
+
+    private void sendWorldHelp(CommandSender sender, String label) {
+        sendDivider(sender);
+        sendMessage(sender, "World", WORLD, commandLine("/" + label + " world status", WORLD, "Shows managed-world state and actions."));
+        sendMessage(sender, "World", WORLD, commandLine("/" + label + " world target oreveil", WORLD, "Sets the managed world name."));
+        sendMessage(sender, "World", WORLD, commandLine("/" + label + " world seed random", WORLD, "Clears the configured managed-world seed."));
+        sendMessage(sender, "World", WORLD, commandLine("/" + label + " world create", WORLD, "Creates the managed world if needed."));
+        sendMessage(sender, "World", WORLD, commandLine("/" + label + " world regenerate confirm", WORLD, "Regenerates after explicit confirmation."));
+        sendMessage(sender, "World", WORLD, commandLine("/" + label + " world default managed", WORLD, "Sets the server default world for next restart."));
+        sendDivider(sender);
+    }
+
+    private void sendDiagnosticsHelp(CommandSender sender, String label) {
+        sendDivider(sender);
+        sendMessage(sender, "Status", STATUS, commandLine("/" + label + " status", STATUS, "Shows compact live controls."));
+        sendMessage(sender, "Status", STATUS, commandLine("/" + label + " inspect", STATUS, "Explains the targeted block's visibility state."));
+        sendMessage(sender, "Status", STATUS, commandLine("/" + label + " diagnostics", STATUS, "Shows packet rewrite, priming, and cache counters."));
+        sendMessage(sender, "Status", STATUS, commandLine("/" + label + " transport AUTO", STATUS, "Uses ProtocolLib when available and falls back otherwise."));
+        sendMessage(sender, "Status", STATUS, commandLine("/" + label + " reload", STATUS, "Reloads config and runtime state."));
         sendDivider(sender);
     }
 
