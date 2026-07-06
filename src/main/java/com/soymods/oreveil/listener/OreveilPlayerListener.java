@@ -49,11 +49,13 @@ public final class OreveilPlayerListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onRespawn(PlayerRespawnEvent event) {
+        obfuscationService.clearPlayerVisibility(event.getPlayer());
         schedulePrime(event.getPlayer(), event.getRespawnLocation(), 10L);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onWorldChange(PlayerChangedWorldEvent event) {
+        obfuscationService.clearPlayerVisibility(event.getPlayer());
         schedulePrime(event.getPlayer(), event.getPlayer().getLocation(), 10L);
     }
 
@@ -80,7 +82,15 @@ public final class OreveilPlayerListener implements Listener {
             return;
         }
 
-        if (configSupplier.get().revealProximityBlocks() <= 0) {
+        OreveilConfig config = configSupplier.get();
+        if (config.revealProximityBlocks() <= 0) {
+            return;
+        }
+
+        int step = Math.max(4, Math.min(8, config.revealProximityBlocks() / 12));
+        if (Math.abs(event.getFrom().getBlockX() - event.getTo().getBlockX()) < step
+            && Math.abs(event.getFrom().getBlockY() - event.getTo().getBlockY()) < step
+            && Math.abs(event.getFrom().getBlockZ() - event.getTo().getBlockZ()) < step) {
             return;
         }
 

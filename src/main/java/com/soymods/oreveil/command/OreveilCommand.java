@@ -1210,10 +1210,10 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
                 return List.of("0", "1", "2");
             }
         },
-        REVEAL_PROXIMITY("reveal_proximity", "obfuscation.reveal-proximity-blocks", "Reveal Proximity", "Controls", CONTROLS, 0, 64, 2) {
+        REVEAL_PROXIMITY("reveal_proximity", "obfuscation.reveal-proximity-blocks", "Exposed Radius", "Controls", CONTROLS, 0, 96, 8) {
             @Override
             List<String> suggestions() {
-                return List.of("0", "6", "8");
+                return List.of("32", "48", "64");
             }
         },
         SALT_DENSITY("salt_density", "world-model.salt-density", "Salt Density", "World", WORLD, 1, 256, 8) {

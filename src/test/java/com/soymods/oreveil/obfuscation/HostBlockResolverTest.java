@@ -45,7 +45,7 @@ final class HostBlockResolverTest {
             true,
             true,
             6,
-            4,
+            true,
             64,
             0,
             false,

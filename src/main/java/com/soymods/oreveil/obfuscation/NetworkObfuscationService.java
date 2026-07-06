@@ -86,9 +86,8 @@ public final class NetworkObfuscationService {
     // -------------------------------------------------------------------------
 
     /**
-     * Per-player visibility: if reveal-on-exposure is enabled, only reveals exposed ores to
-     * players within reveal-proximity-blocks distance. X-ray users outside that radius see
-     * the ore obfuscated even if it borders a cave.
+     * Per-player visibility: buried ores stay hidden, while exposed cave ores can be
+     * revealed from a larger gameplay-friendly radius.
      */
     public Material getClientVisibleMaterial(Block block, Player viewer) {
         if (!config.obfuscationEnabled()) {
@@ -116,12 +115,12 @@ public final class NetworkObfuscationService {
                 rememberRevealedOre(viewer, block);
                 return block.getType();
             }
-            if (viewer != null && isRecentlyRevealedOre(viewer, block, radius + config.revealHysteresisBlocks())) {
+            if (viewer != null && config.keepRevealedExposedOres() && isKnownRevealedOre(viewer, block)) {
                 return block.getType();
             }
         }
 
-        if (viewer != null) {
+        if (viewer != null && !config.keepRevealedExposedOres()) {
             forgetRevealedOre(viewer, block);
         }
         return hostBlockResolver.resolve(block, config);
@@ -208,23 +207,26 @@ public final class NetworkObfuscationService {
 
         syncPreviouslyRevealedOres(player);
 
-        World world = player.getWorld();
         Location origin = player.getLocation();
-        int baseX = origin.getBlockX();
-        int baseY = origin.getBlockY();
-        int baseZ = origin.getBlockZ();
+        World world = origin.getWorld();
+        if (world == null) {
+            return;
+        }
 
-        for (int dx = -radius; dx <= radius; dx++) {
-            for (int dy = -radius; dy <= radius; dy++) {
-                for (int dz = -radius; dz <= radius; dz++) {
-                    Block block = world.getBlockAt(baseX + dx, baseY + dy, baseZ + dz);
-                    if (!exposureService.isProtectedOre(block.getType())) {
-                        continue;
+        int centerChunkX = origin.getBlockX() >> 4;
+        int centerChunkZ = origin.getBlockZ() >> 4;
+        int chunkRadius = Math.max(0, (radius + 15) >> 4);
+        for (int dx = -chunkRadius; dx <= chunkRadius; dx++) {
+            for (int dz = -chunkRadius; dz <= chunkRadius; dz++) {
+                int chunkX = centerChunkX + dx;
+                int chunkZ = centerChunkZ + dz;
+                if (!world.isChunkLoaded(chunkX, chunkZ)) {
+                    continue;
+                }
+                for (Block block : worldModel.getProtectedOreBlocksInChunk(world.getChunkAt(chunkX, chunkZ))) {
+                    if (exposureService.isLegitimatelyExposed(block) && isWithinDistance(player, block, radius)) {
+                        transport.syncBlockToPlayer(player, block, this::getClientVisibleMaterial);
                     }
-                    if (!exposureService.isLegitimatelyExposed(block)) {
-                        continue;
-                    }
-                    transport.syncBlockToPlayer(player, block, this::getClientVisibleMaterial);
                 }
             }
         }
@@ -242,7 +244,7 @@ public final class NetworkObfuscationService {
                 revealed.remove(key);
                 continue;
             }
-            if (!world.isChunkLoaded(key.x() >> 4, key.z() >> 4)) {
+            if (!world.isChunkLoaded(key.x() >> 4, key.z() >> 4) || !isWithinPlayerViewDistance(player, key)) {
                 revealed.remove(key);
                 continue;
             }
@@ -257,16 +259,9 @@ public final class NetworkObfuscationService {
             .add(RevealedBlockKey.from(block));
     }
 
-    private boolean isRecentlyRevealedOre(Player player, Block block, int hideRadius) {
+    private boolean isKnownRevealedOre(Player player, Block block) {
         Set<RevealedBlockKey> revealed = revealedExposedOresByPlayer.get(player.getUniqueId());
-        if (revealed == null || !revealed.contains(RevealedBlockKey.from(block))) {
-            return false;
-        }
-        if (isWithinDistance(player, block, hideRadius)) {
-            return true;
-        }
-        forgetRevealedOre(player, block);
-        return false;
+        return revealed != null && revealed.contains(RevealedBlockKey.from(block));
     }
 
     private void forgetRevealedOre(Player player, Block block) {
@@ -400,11 +395,26 @@ public final class NetworkObfuscationService {
         if (exposedAfterBreak) {
             int radius = config.revealProximityBlocks();
             if (radius <= 0 || (viewer != null && isWithinDistance(viewer, block, radius))) {
+                if (viewer != null) {
+                    rememberRevealedOre(viewer, block);
+                }
+                return block.getType();
+            }
+            if (viewer != null && config.keepRevealedExposedOres() && isKnownRevealedOre(viewer, block)) {
                 return block.getType();
             }
         }
 
         return hostBlockResolver.resolve(block, config);
+    }
+
+    private boolean isWithinPlayerViewDistance(Player player, RevealedBlockKey key) {
+        Location loc = player.getLocation();
+        int playerChunkX = loc.getBlockX() >> 4;
+        int playerChunkZ = loc.getBlockZ() >> 4;
+        int chunkRadius = plugin.getServer().getViewDistance() + 1;
+        return Math.abs((key.x() >> 4) - playerChunkX) <= chunkRadius
+            && Math.abs((key.z() >> 4) - playerChunkZ) <= chunkRadius;
     }
 
     private record RevealedBlockKey(UUID worldId, int x, int y, int z) {

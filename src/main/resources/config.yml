@@ -2,14 +2,12 @@ obfuscation:
   enabled: true
   reveal-on-exposure: true
   reveal-next-to-non-occluding-blocks: true
-  # How close (in blocks) a player must be to an exposed ore for it to be revealed to them.
-  # Ores adjacent to caves are only shown to players within this radius; anyone further away
-  # (including X-ray users) continues to see the obfuscated material.
+  # Exposed cave ores are visible within this radius. Buried ores stay hidden.
   # Set to 0 to reveal all exposed ores globally (old behaviour, weaker against X-ray).
-  reveal-proximity-blocks: 6
-  # Extra distance before an already revealed exposed ore is hidden again.
-  # This prevents visible pop-in/pop-out when walking along the reveal boundary.
-  reveal-hysteresis-blocks: 4
+  reveal-proximity-blocks: 48
+  # Once an exposed ore has been sent to a player, keep it visible for that player
+  # until they leave its chunk/view area, change worlds, or disconnect.
+  keep-revealed-exposed-ores: true
   live-sync-radius-blocks: 64
   initial-sync-chunk-radius: 0
 
