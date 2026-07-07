@@ -13,6 +13,12 @@ import com.soymods.oreveil.obfuscation.transport.TransportMode;
 import com.soymods.oreveil.ui.OreveilAdminGui;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import com.soymods.oreveil.world.OreveilWorldGenerationService;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -24,6 +30,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class OreveilPlugin extends JavaPlugin {
+    private static final DateTimeFormatter CONFIG_BACKUP_SUFFIX = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
     private static final List<Material> ORE_CANDIDATES = List.of(
         Material.COAL_ORE,
         Material.DEEPSLATE_COAL_ORE,
@@ -127,6 +134,25 @@ public final class OreveilPlugin extends JavaPlugin {
         this.obfuscationService.resyncNewSaltBlocks();
 
         return oreveilConfig;
+    }
+
+    public OreveilConfig resetOreveilConfigToDefaults() {
+        File configFile = new File(getDataFolder(), "config.yml");
+        if (configFile.exists()) {
+            File backupFile = new File(
+                getDataFolder(),
+                "config.yml.backup-" + CONFIG_BACKUP_SUFFIX.format(LocalDateTime.now())
+            );
+            try {
+                Files.copy(configFile.toPath(), backupFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                getLogger().info("Backed up Oreveil config to " + backupFile.getName() + ".");
+            } catch (IOException exception) {
+                getLogger().warning("Could not back up Oreveil config before reset: " + exception.getMessage());
+            }
+        }
+
+        saveResource("config.yml", true);
+        return reloadOreveilConfig();
     }
 
     public OreveilConfig oreveilConfig() {

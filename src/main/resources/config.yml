@@ -45,7 +45,7 @@ exposure:
     - BLUE_ICE
 
 world-model:
-  salted-distribution: true
+  salted-distribution: false
   # Preset controlling fake ore density, rare ore caps, weighting, vein size, and performance.
   # salt-density is the baseline budget before the profile multiplier is applied.
   # Options: vanilla-friendly, balanced, aggressive, performance
@@ -53,7 +53,7 @@ world-model:
   # Rough fake ore block budget per chunk. Fake ore is generated in buried vein-like clusters.
   # Higher values increase the density of fake ore signals seen by X-ray users.
   salt-density: 96
-  # Server-private salt for fake ore placement. Change this to a random long before
+  # Server-private salt for fake ore placement. Set this to a private random long before
   # enabling salted-distribution so fake ore signals are not derived from the public seed alone.
   salt-secret: 0
 

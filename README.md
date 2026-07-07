@@ -87,6 +87,7 @@ Oreveil is designed to be manageable from config files, an in-game admin GUI, an
 - Use `/oreveil help <topic>` for focused command examples. Topics include `settings`, `exposure`, `host`, `ores`, `profile`, `world`, and `diagnostics`.
 - Use `/oreveil inspect` to inspect how a targeted block is currently classified and presented to the client.
 - Use `/oreveil diagnostics` to inspect packet rewrite counters, chunk priming counters, and cached ore/salt index sizes.
+- Use `/oreveil reset confirm` to restore bundled defaults. Oreveil backs up the current `config.yml` first.
 
 ### Admin GUI
 
@@ -112,6 +113,8 @@ Compact status, inspection, and diagnostics:
 /oreveil status
 /oreveil inspect
 /oreveil diagnostics
+/oreveil reload
+/oreveil reset confirm
 ```
 
 Editable scalar settings:

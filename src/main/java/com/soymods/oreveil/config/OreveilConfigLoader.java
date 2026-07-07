@@ -41,11 +41,11 @@ public final class OreveilConfigLoader {
             Math.max(0, config.getInt("obfuscation.reveal-proximity-blocks", 48)),
             Math.max(16, config.getInt("obfuscation.live-sync-radius-blocks", 64)),
             Math.max(0, config.getInt("obfuscation.initial-sync-chunk-radius", 0)),
-            config.getBoolean("world-model.salted-distribution", true),
+            config.getBoolean("world-model.salted-distribution", false),
             XrayProfile.fromConfig(config.getString("world-model.xray-profile", "balanced")),
             Math.max(1, config.getInt("world-model.salt-density", 96)),
             parseLong(config.get("world-model.salt-secret"), "world-model.salt-secret", 0L),
-            config.getString("transport.mode", "BLOCK_UPDATE_SYNC"),
+            config.getString("transport.mode", "AUTO"),
             protectedOres,
             revealAdjacentMaterials,
             revealTransparentMaterials,
@@ -174,9 +174,9 @@ public final class OreveilConfigLoader {
                 true,
                 true,
                 null,
-                18,
-                8,
-                0.02D
+                28,
+                0,
+                0.0D
             );
         }
 
@@ -215,9 +215,9 @@ public final class OreveilConfigLoader {
             section.getBoolean("backup-on-regenerate", true),
             section.getBoolean("generate-structures", true),
             configuredSeed,
-            Math.max(0, section.getInt("ore-remix-attempts-per-chunk", 18)),
-            Math.max(0, section.getInt("terrain-adjustment-attempts-per-chunk", 8)),
-            Math.max(0.0D, Math.min(1.0D, section.getDouble("ruin-fragment-chance", 0.02D)))
+            Math.max(0, section.getInt("ore-remix-attempts-per-chunk", 28)),
+            Math.max(0, section.getInt("terrain-adjustment-attempts-per-chunk", 0)),
+            Math.max(0.0D, Math.min(1.0D, section.getDouble("ruin-fragment-chance", 0.0D)))
         );
     }
 }

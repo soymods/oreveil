@@ -68,6 +68,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
                 yield true;
             }
             case "reload" -> handleReload(sender);
+            case "reset", "defaults" -> handleReset(sender, label, args);
             case "inspect" -> handleInspect(sender);
             case "status" -> handleStatus(sender, label);
             case "diagnostics", "diag" -> handleDiagnostics(sender);
@@ -100,6 +101,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
                 "help",
                 "gui",
                 "reload",
+                "reset",
                 "inspect",
                 "status",
                 "diagnostics",
@@ -119,6 +121,9 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("help")) {
             return filter(args[1], List.of("settings", "exposure", "host", "ores", "profile", "world", "diagnostics"));
+        }
+        if (args.length == 2 && (args[0].equalsIgnoreCase("reset") || args[0].equalsIgnoreCase("defaults"))) {
+            return filter(args[1], List.of("confirm"));
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("ore")) {
             return filter(args[1], List.of("add", "remove", "toggle"));
@@ -222,6 +227,28 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
                 .append(Component.text(" protected ores and a ", BASE))
                 .append(highlight(String.valueOf(config.liveSyncRadiusBlocks()), CONTROLS))
                 .append(Component.text(" block sync radius.", BASE))
+        );
+        return true;
+    }
+
+    private boolean handleReset(CommandSender sender, String label, String[] args) {
+        if (args.length < 2 || !args[1].equalsIgnoreCase("confirm")) {
+            sendError(sender, "Use /" + label + " reset confirm to restore bundled defaults. A config backup is created first.");
+            return true;
+        }
+
+        OreveilConfig config = plugin.resetOreveilConfigToDefaults();
+        sendMessage(
+            sender,
+            "Status",
+            STATUS,
+            Component.text("Reset config to bundled defaults with ", BASE)
+                .append(highlight(String.valueOf(config.protectedOres().size()), ORES))
+                .append(Component.text(" protected ores, ", BASE))
+                .append(highlight(config.xrayProfile().configName(), WORLD))
+                .append(Component.text(" profile, and ", BASE))
+                .append(highlight(plugin.obfuscationService().transportName(), STATUS))
+                .append(Component.text(" transport.", BASE))
         );
         return true;
     }
@@ -1200,6 +1227,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         sendMessage(sender, "World", WORLD, commandLine("/" + label + " world default <name>", WORLD, "Sets the server default world for the next restart."));
         sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " help <topic>", CONTROLS, "Shows focused examples."));
         sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " reload", CONTROLS, "Reloads config and runtime state."));
+        sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " reset confirm", ERROR, "Restores bundled defaults after backing up config.yml."));
         sendDivider(sender);
     }
 
@@ -1287,6 +1315,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         sendMessage(sender, "Status", STATUS, commandLine("/" + label + " diagnostics", STATUS, "Shows packet rewrite, priming, and cache counters."));
         sendMessage(sender, "Status", STATUS, commandLine("/" + label + " transport AUTO", STATUS, "Uses ProtocolLib when available and falls back otherwise."));
         sendMessage(sender, "Status", STATUS, commandLine("/" + label + " reload", STATUS, "Reloads config and runtime state."));
+        sendMessage(sender, "Status", ERROR, commandLine("/" + label + " reset confirm", ERROR, "Restores bundled defaults after backing up config.yml."));
         sendDivider(sender);
     }
 

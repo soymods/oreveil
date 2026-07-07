@@ -4,6 +4,7 @@ import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.config.XrayProfile;
 import com.soymods.oreveil.config.XrayProfile.OreRarity;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -42,9 +43,9 @@ public final class AuthoritativeWorldModel {
     private final Plugin plugin;
     private OreveilConfig config;
 
-    // Per-chunk salt state: chunkKey → (packed local block pos → fake ore material)
-    private final Map<ChunkKey, Map<Integer, Material>> saltCache = new HashMap<>();
-    private final Map<ChunkKey, Map<Integer, Material>> protectedOreCache = new HashMap<>();
+    // Per-chunk block state is stored as sorted compact arrays rather than entry-heavy HashMaps.
+    private final Map<ChunkKey, ChunkBlockData> saltCache = new HashMap<>();
+    private final Map<ChunkKey, ChunkBlockData> protectedOreCache = new HashMap<>();
     private final Map<ChunkKey, Set<Integer>> exposedProtectedOreCache = new HashMap<>();
     private static final BlockFace[] CARDINAL_FACES = {
         BlockFace.UP,
@@ -150,7 +151,7 @@ public final class AuthoritativeWorldModel {
         }
 
         ChunkOreScan scan = scanProtectedOres(chunk);
-        protectedOreCache.put(key, scan.ores());
+        protectedOreCache.put(key, ChunkBlockData.from(scan.ores()));
         exposedProtectedOreCache.put(key, scan.exposed());
         if (!config.saltedDistributionEnabled()) {
             saltCache.remove(key);
@@ -159,7 +160,7 @@ public final class AuthoritativeWorldModel {
 
         Map<Integer, Material> salt = new HashMap<>();
         generateSalt(chunk, salt);
-        saltCache.put(key, salt);
+        saltCache.put(key, ChunkBlockData.from(salt));
     }
 
     public void evictChunk(Chunk chunk) {
@@ -175,7 +176,7 @@ public final class AuthoritativeWorldModel {
 
     /** Returns the fake ore material this position should display as, or null if not a salt block. */
     public Material getSaltMaterial(Block block) {
-        Map<Integer, Material> salt = saltCache.get(keyOf(block.getChunk()));
+        ChunkBlockData salt = saltCache.get(keyOf(block.getChunk()));
         if (salt == null) {
             return null;
         }
@@ -184,24 +185,19 @@ public final class AuthoritativeWorldModel {
 
     /** Returns all salt block positions in the given chunk (used for chunk priming on player join). */
     public List<Block> getSaltBlocksInChunk(Chunk chunk) {
-        Map<Integer, Material> salt = saltCache.get(keyOf(chunk));
+        ChunkBlockData salt = saltCache.get(keyOf(chunk));
         if (salt == null || salt.isEmpty()) {
             return List.of();
         }
         World world = chunk.getWorld();
         int baseX = chunk.getX() << 4;
         int baseZ = chunk.getZ() << 4;
-        List<Block> blocks = new ArrayList<>(salt.size());
-        for (int localKey : salt.keySet()) {
-            int[] loc = unpackLocal(localKey);
-            blocks.add(world.getBlockAt(baseX + loc[0], loc[1], baseZ + loc[2]));
-        }
-        return blocks;
+        return salt.toBlocks(world, baseX, baseZ);
     }
 
     /** Returns cached protected ore positions in the given chunk. */
     public List<Block> getProtectedOreBlocksInChunk(Chunk chunk) {
-        Map<Integer, Material> ores = protectedOreCache.get(keyOf(chunk));
+        ChunkBlockData ores = protectedOreCache.get(keyOf(chunk));
         if (ores == null || ores.isEmpty()) {
             return List.of();
         }
@@ -209,41 +205,30 @@ public final class AuthoritativeWorldModel {
         World world = chunk.getWorld();
         int baseX = chunk.getX() << 4;
         int baseZ = chunk.getZ() << 4;
-        List<Block> blocks = new ArrayList<>(ores.size());
-        for (int localKey : ores.keySet()) {
-            int[] loc = unpackLocal(localKey);
-            blocks.add(world.getBlockAt(baseX + loc[0], loc[1], baseZ + loc[2]));
-        }
-        return blocks;
+        return ores.toBlocks(world, baseX, baseZ);
     }
 
     public Map<Integer, Material> getProtectedOreEntriesInChunk(UUID worldId, int chunkX, int chunkZ) {
-        Map<Integer, Material> ores = protectedOreCache.get(new ChunkKey(worldId, chunkX, chunkZ));
-        return ores == null || ores.isEmpty() ? Map.of() : Map.copyOf(ores);
+        ChunkBlockData ores = protectedOreCache.get(new ChunkKey(worldId, chunkX, chunkZ));
+        return ores == null || ores.isEmpty() ? Map.of() : ores.asMap();
     }
 
     public Map<Integer, Material> getBuriedProtectedOreEntriesInChunk(UUID worldId, int chunkX, int chunkZ) {
         ChunkKey key = new ChunkKey(worldId, chunkX, chunkZ);
-        Map<Integer, Material> ores = protectedOreCache.get(key);
+        ChunkBlockData ores = protectedOreCache.get(key);
         if (ores == null || ores.isEmpty()) {
             return Map.of();
         }
         if (!config.revealOnExposure()) {
-            return Map.copyOf(ores);
+            return ores.asMap();
         }
 
         Set<Integer> exposed = exposedProtectedOreCache.get(key);
         if (exposed == null || exposed.isEmpty()) {
-            return Map.copyOf(ores);
+            return ores.asMap();
         }
 
-        Map<Integer, Material> buried = new HashMap<>();
-        for (Map.Entry<Integer, Material> entry : ores.entrySet()) {
-            if (!exposed.contains(entry.getKey())) {
-                buried.put(entry.getKey(), entry.getValue());
-            }
-        }
-        return buried.isEmpty() ? Map.of() : Map.copyOf(buried);
+        return ores.asMapExcluding(exposed);
     }
 
     public String describeChunkRewriteState(Block block) {
@@ -253,7 +238,7 @@ public final class AuthoritativeWorldModel {
         if (saltMaterial != null) {
             return "fake salt: " + saltMaterial.name();
         }
-        Map<Integer, Material> ores = protectedOreCache.get(key);
+        ChunkBlockData ores = protectedOreCache.get(key);
         if (ores == null || !ores.containsKey(packed)) {
             return "not cached";
         }
@@ -283,14 +268,14 @@ public final class AuthoritativeWorldModel {
     }
 
     public Map<Integer, Material> getSaltEntriesInChunk(UUID worldId, int chunkX, int chunkZ) {
-        Map<Integer, Material> salt = saltCache.get(new ChunkKey(worldId, chunkX, chunkZ));
-        return salt == null || salt.isEmpty() ? Map.of() : Map.copyOf(salt);
+        ChunkBlockData salt = saltCache.get(new ChunkKey(worldId, chunkX, chunkZ));
+        return salt == null || salt.isEmpty() ? Map.of() : salt.asMap();
     }
 
     /** Returns all salt blocks across all currently cached chunks (used for pre-reload drain). */
     public List<Block> collectAllSaltBlocks() {
         List<Block> result = new ArrayList<>();
-        for (Map.Entry<ChunkKey, Map<Integer, Material>> entry : saltCache.entrySet()) {
+        for (Map.Entry<ChunkKey, ChunkBlockData> entry : saltCache.entrySet()) {
             ChunkKey key = entry.getKey();
             World world = plugin.getServer().getWorld(key.worldId());
             if (world == null) {
@@ -298,27 +283,22 @@ public final class AuthoritativeWorldModel {
             }
             int baseX = key.x() << 4;
             int baseZ = key.z() << 4;
-            for (int localKey : entry.getValue().keySet()) {
-                int[] loc = unpackLocal(localKey);
-                result.add(world.getBlockAt(baseX + loc[0], loc[1], baseZ + loc[2]));
-            }
+            result.addAll(entry.getValue().toBlocks(world, baseX, baseZ));
         }
         return result;
     }
 
     public CacheStats cacheStats() {
         int cachedProtectedOres = 0;
-        for (Map<Integer, Material> ores : protectedOreCache.values()) {
+        for (ChunkBlockData ores : protectedOreCache.values()) {
             cachedProtectedOres += ores.size();
         }
 
         int cachedSaltBlocks = 0;
         Map<Material, Integer> saltByType = new java.util.EnumMap<>(Material.class);
-        for (Map<Integer, Material> salt : saltCache.values()) {
+        for (ChunkBlockData salt : saltCache.values()) {
             cachedSaltBlocks += salt.size();
-            for (Material material : salt.values()) {
-                saltByType.merge(material, 1, Integer::sum);
-            }
+            salt.mergeMaterialCounts(saltByType);
         }
 
         return new CacheStats(
@@ -339,16 +319,16 @@ public final class AuthoritativeWorldModel {
     public void refreshBlock(Block block) {
         ChunkKey key = keyOf(block.getChunk());
         int packed = packLocal(block.getX() & 0xF, block.getY(), block.getZ() & 0xF);
-        Map<Integer, Material> salt = saltCache.get(keyOf(block.getChunk()));
+        ChunkBlockData salt = saltCache.get(key);
         if (salt != null) {
-            salt.remove(packed);
+            saltCache.put(key, salt.without(packed));
         }
 
-        Map<Integer, Material> ores = protectedOreCache.computeIfAbsent(key, ignored -> new HashMap<>());
+        ChunkBlockData ores = protectedOreCache.getOrDefault(key, ChunkBlockData.EMPTY);
         if (isProtectedOre(block.getType())) {
-            ores.put(packed, block.getType());
+            protectedOreCache.put(key, ores.with(packed, block.getType()));
         } else {
-            ores.remove(packed);
+            protectedOreCache.put(key, ores.without(packed));
         }
         refreshExposure(block);
         for (BlockFace face : CARDINAL_FACES) {
@@ -383,10 +363,11 @@ public final class AuthoritativeWorldModel {
         XrayProfile profile = config.xrayProfile();
         int targetBlocks = profile.effectiveSaltBudget(config.saltDensity());
         int rareBlockLimit = profile.maxRareOreBlocks(targetBlocks);
+        int rareBlocks = 0;
         int attempts = Math.max(1, targetBlocks / 3);
 
         for (int i = 0; i < attempts && salt.size() < targetBlocks; i++) {
-            SaltOreRule rule = pickSaltOreRule(candidates, rng, profile, salt, rareBlockLimit);
+            SaltOreRule rule = pickSaltOreRule(candidates, rng, profile, rareBlocks, rareBlockLimit);
             if (rule == null) {
                 return;
             }
@@ -394,7 +375,7 @@ public final class AuthoritativeWorldModel {
             int y = Math.max(minY, rule.minY()) + rng.nextInt(Math.max(1, Math.min(maxY - 1, rule.maxY()) - Math.max(minY, rule.minY()) + 1));
             int lz = rng.nextInt(16);
 
-            growSaltVein(world, baseX, baseZ, lx, y, lz, rule, rng, salt, targetBlocks, profile, rareBlockLimit);
+            rareBlocks = growSaltVein(world, baseX, baseZ, lx, y, lz, rule, rng, salt, targetBlocks, profile, rareBlocks, rareBlockLimit);
         }
     }
 
@@ -409,7 +390,7 @@ public final class AuthoritativeWorldModel {
         List<SaltOreRule> candidates,
         Random rng,
         XrayProfile profile,
-        Map<Integer, Material> salt,
+        int rareBlocks,
         int rareBlockLimit
     ) {
         if (candidates.isEmpty()) {
@@ -418,7 +399,7 @@ public final class AuthoritativeWorldModel {
 
         int totalWeight = 0;
         for (SaltOreRule rule : candidates) {
-            if (isRareSaltOre(rule.material()) && countRareSaltBlocks(salt) >= rareBlockLimit) {
+            if (isRareSaltOre(rule.material()) && rareBlocks >= rareBlockLimit) {
                 continue;
             }
             totalWeight += profile.effectiveWeight(rule.weight(), rarityOf(rule.material()));
@@ -429,7 +410,7 @@ public final class AuthoritativeWorldModel {
 
         int roll = rng.nextInt(Math.max(1, totalWeight));
         for (SaltOreRule rule : candidates) {
-            if (isRareSaltOre(rule.material()) && countRareSaltBlocks(salt) >= rareBlockLimit) {
+            if (isRareSaltOre(rule.material()) && rareBlocks >= rareBlockLimit) {
                 continue;
             }
             roll -= profile.effectiveWeight(rule.weight(), rarityOf(rule.material()));
@@ -440,7 +421,7 @@ public final class AuthoritativeWorldModel {
         return candidates.getLast();
     }
 
-    private void growSaltVein(
+    private int growSaltVein(
         World world,
         int baseX,
         int baseZ,
@@ -452,12 +433,16 @@ public final class AuthoritativeWorldModel {
         Map<Integer, Material> salt,
         int targetBlocks,
         XrayProfile profile,
+        int rareBlocks,
         int rareBlockLimit
     ) {
         int baseVeinSize = rule.veinMin() + rng.nextInt(Math.max(1, rule.veinMax() - rule.veinMin() + 1));
         int veinSize = profile.effectiveVeinSize(baseVeinSize);
         List<int[]> vein = new ArrayList<>();
-        tryAddSaltBlock(world, baseX, baseZ, startLx, startY, startLz, rule, salt, vein, rareBlockLimit);
+        if (tryAddSaltBlock(world, baseX, baseZ, startLx, startY, startLz, rule, salt, vein, rareBlocks, rareBlockLimit)
+            && isRareSaltOre(rule.material())) {
+            rareBlocks++;
+        }
 
         int guard = veinSize * 10;
         while (vein.size() < veinSize && salt.size() < targetBlocks && guard-- > 0) {
@@ -465,7 +450,7 @@ public final class AuthoritativeWorldModel {
                 ? new int[]{startLx, startY, startLz}
                 : vein.get(rng.nextInt(vein.size()));
             BlockFace face = CARDINAL_FACES[rng.nextInt(CARDINAL_FACES.length)];
-            tryAddSaltBlock(
+            if (tryAddSaltBlock(
                 world,
                 baseX,
                 baseZ,
@@ -475,12 +460,16 @@ public final class AuthoritativeWorldModel {
                 rule,
                 salt,
                 vein,
+                rareBlocks,
                 rareBlockLimit
-            );
+            ) && isRareSaltOre(rule.material())) {
+                rareBlocks++;
+            }
         }
+        return rareBlocks;
     }
 
-    private void tryAddSaltBlock(
+    private boolean tryAddSaltBlock(
         World world,
         int baseX,
         int baseZ,
@@ -490,21 +479,22 @@ public final class AuthoritativeWorldModel {
         SaltOreRule rule,
         Map<Integer, Material> salt,
         List<int[]> vein,
+        int rareBlocks,
         int rareBlockLimit
     ) {
         if (lx < 0 || lx > 15 || lz < 0 || lz > 15 || y < rule.minY() || y > rule.maxY()) {
-            return;
+            return false;
         }
         if (y < world.getMinHeight() || y >= world.getMaxHeight()) {
-            return;
+            return false;
         }
 
         int packed = packLocal(lx, y, lz);
         if (salt.containsKey(packed)) {
-            return;
+            return false;
         }
-        if (isRareSaltOre(rule.material()) && countRareSaltBlocks(salt) >= rareBlockLimit) {
-            return;
+        if (isRareSaltOre(rule.material()) && rareBlocks >= rareBlockLimit) {
+            return false;
         }
 
         Block block = world.getBlockAt(baseX + lx, y, baseZ + lz);
@@ -513,11 +503,12 @@ public final class AuthoritativeWorldModel {
             || config.protectedOres().contains(type)
             || !matchesHost(rule.material(), type)
             || isExposed(block)) {
-            return;
+            return false;
         }
 
         salt.put(packed, rule.material());
         vein.add(new int[]{lx, y, lz});
+        return true;
     }
 
     private static OreRarity rarityOf(Material material) {
@@ -545,16 +536,6 @@ public final class AuthoritativeWorldModel {
                 ANCIENT_DEBRIS -> true;
             default -> false;
         };
-    }
-
-    private static int countRareSaltBlocks(Map<Integer, Material> salt) {
-        int count = 0;
-        for (Material material : salt.values()) {
-            if (isRareSaltOre(material)) {
-                count++;
-            }
-        }
-        return count;
     }
 
     private static boolean matchesHost(Material ore, Material host) {
@@ -657,13 +638,13 @@ public final class AuthoritativeWorldModel {
     private void removeCachedBlock(Block block) {
         ChunkKey key = keyOf(block.getChunk());
         int packed = packLocal(block.getX() & 0xF, block.getY(), block.getZ() & 0xF);
-        Map<Integer, Material> salt = saltCache.get(key);
+        ChunkBlockData salt = saltCache.get(key);
         if (salt != null) {
-            salt.remove(packed);
+            saltCache.put(key, salt.without(packed));
         }
-        Map<Integer, Material> ores = protectedOreCache.get(key);
+        ChunkBlockData ores = protectedOreCache.get(key);
         if (ores != null) {
-            ores.remove(packed);
+            protectedOreCache.put(key, ores.without(packed));
         }
         Set<Integer> exposed = exposedProtectedOreCache.get(key);
         if (exposed != null) {
@@ -678,6 +659,129 @@ public final class AuthoritativeWorldModel {
 
     private static int[] unpackLocal(int packed) {
         return new int[]{packed & 0xF, (packed >> 8) - 2048, (packed >> 4) & 0xF};
+    }
+
+    private record ChunkBlockData(int[] positions, Material[] materials) {
+        private static final ChunkBlockData EMPTY = new ChunkBlockData(new int[0], new Material[0]);
+
+        private ChunkBlockData {
+            if (positions.length != materials.length) {
+                throw new IllegalArgumentException("positions and materials must be the same length");
+            }
+        }
+
+        static ChunkBlockData from(Map<Integer, Material> source) {
+            if (source.isEmpty()) {
+                return EMPTY;
+            }
+
+            int[] positions = source.keySet().stream().mapToInt(Integer::intValue).sorted().toArray();
+            Material[] materials = new Material[positions.length];
+            for (int i = 0; i < positions.length; i++) {
+                materials[i] = source.get(positions[i]);
+            }
+            return new ChunkBlockData(positions, materials);
+        }
+
+        int size() {
+            return positions.length;
+        }
+
+        boolean isEmpty() {
+            return positions.length == 0;
+        }
+
+        Material get(int packed) {
+            int index = Arrays.binarySearch(positions, packed);
+            return index >= 0 ? materials[index] : null;
+        }
+
+        boolean containsKey(int packed) {
+            return Arrays.binarySearch(positions, packed) >= 0;
+        }
+
+        Map<Integer, Material> asMap() {
+            if (isEmpty()) {
+                return Map.of();
+            }
+
+            Map<Integer, Material> map = new HashMap<>(positions.length);
+            for (int i = 0; i < positions.length; i++) {
+                map.put(positions[i], materials[i]);
+            }
+            return Map.copyOf(map);
+        }
+
+        Map<Integer, Material> asMapExcluding(Set<Integer> excludedPositions) {
+            if (isEmpty()) {
+                return Map.of();
+            }
+
+            Map<Integer, Material> map = new HashMap<>(positions.length);
+            for (int i = 0; i < positions.length; i++) {
+                if (!excludedPositions.contains(positions[i])) {
+                    map.put(positions[i], materials[i]);
+                }
+            }
+            return map.isEmpty() ? Map.of() : Map.copyOf(map);
+        }
+
+        List<Block> toBlocks(World world, int baseX, int baseZ) {
+            if (isEmpty()) {
+                return List.of();
+            }
+
+            List<Block> blocks = new ArrayList<>(positions.length);
+            for (int packed : positions) {
+                int[] loc = unpackLocal(packed);
+                blocks.add(world.getBlockAt(baseX + loc[0], loc[1], baseZ + loc[2]));
+            }
+            return blocks;
+        }
+
+        void mergeMaterialCounts(Map<Material, Integer> counts) {
+            for (Material material : materials) {
+                counts.merge(material, 1, Integer::sum);
+            }
+        }
+
+        ChunkBlockData with(int packed, Material material) {
+            int index = Arrays.binarySearch(positions, packed);
+            if (index >= 0) {
+                Material[] nextMaterials = materials.clone();
+                nextMaterials[index] = material;
+                return new ChunkBlockData(positions, nextMaterials);
+            }
+
+            int insertionPoint = -index - 1;
+            int[] nextPositions = new int[positions.length + 1];
+            Material[] nextMaterials = new Material[materials.length + 1];
+            System.arraycopy(positions, 0, nextPositions, 0, insertionPoint);
+            System.arraycopy(materials, 0, nextMaterials, 0, insertionPoint);
+            nextPositions[insertionPoint] = packed;
+            nextMaterials[insertionPoint] = material;
+            System.arraycopy(positions, insertionPoint, nextPositions, insertionPoint + 1, positions.length - insertionPoint);
+            System.arraycopy(materials, insertionPoint, nextMaterials, insertionPoint + 1, materials.length - insertionPoint);
+            return new ChunkBlockData(nextPositions, nextMaterials);
+        }
+
+        ChunkBlockData without(int packed) {
+            int index = Arrays.binarySearch(positions, packed);
+            if (index < 0) {
+                return this;
+            }
+            if (positions.length == 1) {
+                return EMPTY;
+            }
+
+            int[] nextPositions = new int[positions.length - 1];
+            Material[] nextMaterials = new Material[materials.length - 1];
+            System.arraycopy(positions, 0, nextPositions, 0, index);
+            System.arraycopy(materials, 0, nextMaterials, 0, index);
+            System.arraycopy(positions, index + 1, nextPositions, index, positions.length - index - 1);
+            System.arraycopy(materials, index + 1, nextMaterials, index, materials.length - index - 1);
+            return new ChunkBlockData(nextPositions, nextMaterials);
+        }
     }
 
     private record ChunkOreScan(Map<Integer, Material> ores, Set<Integer> exposed) {}

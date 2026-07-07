@@ -11,7 +11,7 @@ softdepend:
 commands:
   oreveil:
     description: Opens the Oreveil admin GUI, with advanced command tools available.
-    usage: /oreveil [gui|help|status|diagnostics|inspect|settings|get|explain|ores|ore|exposure|host|toggle|set|transport|profile|world|reload]
+    usage: /oreveil [gui|help|status|diagnostics|inspect|settings|get|explain|ores|ore|exposure|host|toggle|set|transport|profile|world|reload|reset]
     permission: oreveil.admin
 permissions:
   oreveil.admin:
