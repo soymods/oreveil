@@ -10,8 +10,8 @@ softdepend:
   - ProtocolLib
 commands:
   oreveil:
-    description: Administrative tools for Oreveil configuration and inspection.
-    usage: /oreveil <help|status|diagnostics|inspect|settings|get|explain|ores|ore|exposure|host|toggle|set|transport|world|reload>
+    description: Opens the Oreveil admin GUI, with advanced command tools available.
+    usage: /oreveil [gui|help|status|diagnostics|inspect|settings|get|explain|ores|ore|exposure|host|toggle|set|transport|profile|world|reload]
     permission: oreveil.admin
 permissions:
   oreveil.admin:

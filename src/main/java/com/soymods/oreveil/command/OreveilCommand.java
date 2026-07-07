@@ -53,11 +53,16 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
-            sendHelp(sender, label, args);
+            if (sender instanceof Player player) {
+                plugin.openAdminGui(player);
+            } else {
+                sendHelp(sender, label, args);
+            }
             return true;
         }
 
         return switch (args[0].toLowerCase(Locale.ROOT)) {
+            case "gui", "menu" -> handleGui(sender);
             case "help" -> {
                 sendHelp(sender, label, args);
                 yield true;
@@ -93,6 +98,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1) {
             return filter(args[0], List.of(
                 "help",
+                "gui",
                 "reload",
                 "inspect",
                 "status",
@@ -193,6 +199,16 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         return List.of();
     }
 
+    private boolean handleGui(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            sendError(sender, "Only players can open the Oreveil GUI. Use /oreveil help for command tools.");
+            return true;
+        }
+
+        plugin.openAdminGui(player);
+        return true;
+    }
+
     private boolean handleReload(CommandSender sender) {
         OreveilConfig config = plugin.reloadOreveilConfig();
         sendMessage(
@@ -289,8 +305,10 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             sender,
             "Status",
             STATUS,
-            Component.text("Transport: ", BASE)
-                .append(transportPicker(config, label))
+            Component.text("Runtime: ", BASE)
+                .append(highlight(onOff(config.obfuscationEnabled()), config.obfuscationEnabled() ? STATUS : MUTED))
+                .append(Component.text("  Transport: ", BASE))
+                .append(highlight(plugin.obfuscationService().transportName(), STATUS))
         );
         sendMessage(
             sender,
@@ -298,68 +316,17 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             STATUS,
             Component.text("Protected ores: ", BASE)
                 .append(highlight(String.valueOf(config.protectedOres().size()), ORES))
-                .append(Component.text("  Selector: ", BASE))
-                .append(action("/" + label + " ores", "open", ORES, "Open the clickable ore selector."))
-        );
-        sendMessage(
-            sender,
-            "Controls",
-            CONTROLS,
-            numericControl(ConfigSetting.LIVE_SYNC_RADIUS, config.liveSyncRadiusBlocks(), label)
-        );
-        sendMessage(
-            sender,
-            "Controls",
-            CONTROLS,
-            numericControl(ConfigSetting.CHUNK_PRIME_RADIUS, config.initialSyncChunkRadius(), label)
-        );
-        sendMessage(
-            sender,
-            "Controls",
-            CONTROLS,
-            numericControl(ConfigSetting.REVEAL_PROXIMITY, config.revealProximityBlocks(), label)
-        );
-        sendMessage(
-            sender,
-            "Controls",
-            CONTROLS,
-            toggleControl(ConfigSetting.REVEAL_ON_EXPOSURE, config.revealOnExposure(), label)
-        );
-        sendMessage(
-            sender,
-            "Controls",
-            CONTROLS,
-            toggleControl(ConfigSetting.NON_OCCLUDING_REVEAL, config.revealNextToNonOccludingBlocks(), label)
+                .append(Component.text("  Reveal: ", BASE))
+                .append(highlight(onOff(config.revealOnExposure()), config.revealOnExposure() ? ORES : MUTED))
         );
         sendMessage(
             sender,
             "World",
             WORLD,
-            toggleControl(ConfigSetting.WORLD_GENERATION_ENABLED, config.worldGeneration().enabled(), label)
-        );
-        sendMessage(
-            sender,
-            "World",
-            WORLD,
-            toggleControl(ConfigSetting.OBFUSCATION_ENABLED, config.obfuscationEnabled(), label)
-        );
-        sendMessage(
-            sender,
-            "World",
-            WORLD,
-            toggleControl(ConfigSetting.SALTED_DISTRIBUTION, config.saltedDistributionEnabled(), label)
-        );
-        sendMessage(
-            sender,
-            "World",
-            WORLD,
-            profileControl(config.xrayProfile(), label)
-        );
-        sendMessage(
-            sender,
-            "World",
-            WORLD,
-            numericControl(ConfigSetting.SALT_DENSITY, config.saltDensity(), label)
+            Component.text("Xray profile: ", BASE)
+                .append(highlight(config.xrayProfile().configName(), WORLD))
+                .append(Component.text("  Salted distribution: ", BASE))
+                .append(highlight(onOff(config.saltedDistributionEnabled()), config.saltedDistributionEnabled() ? WORLD : MUTED))
         );
         sendMessage(
             sender,
@@ -367,6 +334,11 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             WORLD,
             worldSummary(config.worldGeneration(), label)
         );
+        if (sender instanceof Player) {
+            sendMessage(sender, "Oreveil", CONTROLS, Component.text("Use /" + label + " to open the admin GUI. Advanced commands remain available with /" + label + " help.", BASE));
+        } else {
+            sendMessage(sender, "Oreveil", CONTROLS, Component.text("Use /" + label + " help for advanced commands.", BASE));
+        }
         sendDivider(sender);
         return true;
     }
@@ -1206,12 +1178,13 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         }
 
         sendDivider(sender);
-        sendMessage(sender, "Oreveil", CONTROLS, Component.text("Command overview.", BASE));
-        sendMessage(sender, "Status", STATUS, commandLine("/" + label + " status", STATUS, "Shows the live control panel."));
+        sendMessage(sender, "Oreveil", CONTROLS, Component.text("Advanced command tools. Players can use /" + label + " to open the GUI.", BASE));
+        sendMessage(sender, "Status", STATUS, commandLine("/" + label, STATUS, "Opens the admin GUI for players."));
+        sendMessage(sender, "Status", STATUS, commandLine("/" + label + " status", STATUS, "Shows a compact runtime summary."));
         sendMessage(sender, "Status", STATUS, commandLine("/" + label + " diagnostics", STATUS, "Shows packet rewrite and cache counters."));
         sendMessage(sender, "Status", STATUS, commandLine("/" + label + " inspect", STATUS, "Inspects the targeted block."));
         sendMessage(sender, "World", WORLD, commandLine("/" + label + " profile <preset>", WORLD, "Changes the fake-ore behavior preset."));
-        sendMessage(sender, "Ores", ORES, commandLine("/" + label + " ores", ORES, "Opens the clickable ore selector."));
+        sendMessage(sender, "Ores", ORES, commandLine("/" + label + " ores", ORES, "Shows the advanced clickable ore selector."));
         sendMessage(sender, "Ores", ORES, commandLine("/" + label + " ore <add|remove|toggle> <ore>", ORES, "Edits protected ore materials."));
         sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " exposure", CONTROLS, "Edits exposure material lists."));
         sendMessage(sender, "World", WORLD, commandLine("/" + label + " host", WORLD, "Edits host block defaults and overrides."));

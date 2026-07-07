@@ -10,6 +10,7 @@ import com.soymods.oreveil.listener.OreveilWorldListener;
 import com.soymods.oreveil.obfuscation.NetworkObfuscationService;
 import com.soymods.oreveil.obfuscation.scan.ChunkObfuscationPrimer;
 import com.soymods.oreveil.obfuscation.transport.TransportMode;
+import com.soymods.oreveil.ui.OreveilAdminGui;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import com.soymods.oreveil.world.OreveilWorldGenerationService;
 import java.util.ArrayList;
@@ -19,6 +20,7 @@ import java.util.Set;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class OreveilPlugin extends JavaPlugin {
@@ -50,6 +52,7 @@ public final class OreveilPlugin extends JavaPlugin {
     private ExposureService exposureService;
     private NetworkObfuscationService obfuscationService;
     private OreveilWorldGenerationService worldGenerationService;
+    private OreveilAdminGui adminGui;
 
     @Override
     public void onEnable() {
@@ -61,6 +64,7 @@ public final class OreveilPlugin extends JavaPlugin {
         this.exposureService = new ExposureService(getLogger(), oreveilConfig);
         this.obfuscationService = new NetworkObfuscationService(this, getLogger(), oreveilConfig, worldModel, exposureService);
         this.worldGenerationService = new OreveilWorldGenerationService(this, getLogger(), oreveilConfig);
+        this.adminGui = new OreveilAdminGui(this);
         this.worldGenerationService.setMutationSync(blocks -> {
             blocks.forEach(worldModel::refreshBlock);
             obfuscationService.resyncBlocks(blocks);
@@ -77,6 +81,7 @@ public final class OreveilPlugin extends JavaPlugin {
             new OreveilPlayerListener(this, chunkPrimer, obfuscationService, this::oreveilConfig),
             this
         );
+        getServer().getPluginManager().registerEvents(adminGui, this);
         registerCommands();
 
         // Handle late enable: sync any players already online when the plugin is loaded
@@ -146,6 +151,10 @@ public final class OreveilPlugin extends JavaPlugin {
 
     public AuthoritativeWorldModel.CacheStats cacheStats() {
         return worldModel.cacheStats();
+    }
+
+    public void openAdminGui(Player player) {
+        adminGui.open(player);
     }
 
     public List<Material> candidateOreMaterials() {
