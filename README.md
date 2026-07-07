@@ -2,7 +2,7 @@
 
 # Oreveil
 
-[![Minecraft](https://img.shields.io/badge/Minecraft-1.21.4-00AA00?style=for-the-badge&logo=minecraft)](https://minecraft.net)
+[![Minecraft](https://img.shields.io/badge/Minecraft-1.21.x-00AA00?style=for-the-badge&logo=minecraft)](https://minecraft.net)
 [![Paper](https://img.shields.io/badge/Paper-Server%20Plugin-FFFFFF?style=for-the-badge&logo=papermc&logoColor=black)](https://papermc.io)
 [![Java](https://img.shields.io/badge/Java-21+-FF6B6B?style=for-the-badge&logo=openjdk)](https://openjdk.org)
 
@@ -173,9 +173,9 @@ Managed world tools:
 
 ## Compatibility
 
-- Built for Paper-based servers targeting Minecraft `1.21.4`.
+- Built for Paper-based servers targeting Minecraft `1.21.x`.
 - Requires Java `21+`.
-- Integrates with ProtocolLib when installed.
+- Integrates with ProtocolLib when installed. Runtime-incompatible chunk packet rewriting disables itself and falls back to chunk priming plus block update sync.
 
 ## Release Readiness
 
@@ -212,7 +212,7 @@ Use the dev-server script to build Oreveil, provision a disposable Paper server 
 node scripts/dev-server.mjs
 ```
 
-Then join `localhost:25565` from a Minecraft `1.21.4` client. To auto-op your offline-mode test player on first setup:
+Then join `localhost:25565` from a client matching the Paper version under test. To auto-op your offline-mode test player on first setup:
 
 ```bash
 MC_USERNAME=YourName node scripts/dev-server.mjs
@@ -250,10 +250,11 @@ In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joinin
 | Component | Version |
 |-----------|---------|
 | Plugin Version | `0.1.0-SNAPSHOT` |
-| Target Minecraft Version | `1.21.4` |
+| Target Minecraft Version | `1.21.x` |
 | Java | `21+` |
 
 ## Notes
 
-- Oreveil targets Paper API `1.21.4-R0.1-SNAPSHOT`.
+- Oreveil compiles against Paper API `1.21-R0.1-SNAPSHOT` and is intended to run across Paper `1.21.x`.
 - ProtocolLib transport is used automatically when available, depending on `transport.mode`.
+- ProtocolLib chunk packet rewriting is best-effort across `1.21.x`; if the server or ProtocolLib exposes an incompatible chunk packet shape, Oreveil disables that rewrite path for the runtime and keeps the sync fallback active.

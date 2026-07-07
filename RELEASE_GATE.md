@@ -12,13 +12,13 @@ This gate defines the minimum bar for promoting a build from beta to full releas
 
 ## 2. Manual Smoke Gate (must pass)
 
-Run this on Paper `1.21.4` with ProtocolLib installed.
+Run this on Paper `1.21.x` with ProtocolLib installed. At minimum, smoke test the oldest supported `1.21` runtime and the newest available `1.21.x` runtime for the release.
 
 Checklist:
 - Start a clean Paper server with Oreveil and ProtocolLib.
-- Join with a Minecraft `1.21.4` client.
+- Join with a Minecraft client matching the Paper version under test.
 - Confirm Oreveil enables without stack traces.
-- Move through newly loaded chunks and confirm no packet rewrite errors are logged.
+- Move through newly loaded chunks and confirm either chunk packet rewrite counters increase without failures or Oreveil logs a single chunk rewrite disablement and continues using the fallback path.
 - Mine into buried ore and confirm adjacent ore reveals only when legitimately exposed.
 - Trigger common block updates, including block break/place, fluids, explosions, pistons, teleport, respawn, and leaf decay.
 - Run `/oreveil`, `/oreveil status`, `/oreveil diagnostics`, `/oreveil inspect`, and `/oreveil reload`.

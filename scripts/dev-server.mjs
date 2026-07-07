@@ -9,7 +9,7 @@ import { spawn } from "node:child_process";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
 const props = readProperties(join(root, "gradle.properties"));
-const minecraftVersion = process.env.PAPER_VERSION ?? props.minecraft_version ?? "1.21.4";
+const minecraftVersion = process.env.PAPER_VERSION ?? props.minecraft_version ?? "1.21";
 const archivesBaseName = props.archives_base_name ?? "oreveil";
 const pluginVersion = props.plugin_version ?? "0.1.0-SNAPSHOT";
 const serverDir = join(root, "build", "dev-server");

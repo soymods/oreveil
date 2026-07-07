@@ -41,6 +41,7 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
     private PacketAdapter packetAdapter;
     private boolean warnedMultiBlockRewriteFailure;
     private boolean warnedChunkRewriteFailure;
+    private boolean chunkPacketRewriteDisabled;
 
     public ProtocolLibTransport(
         Plugin plugin,
@@ -61,6 +62,7 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
         this.config = config;
         this.materialResolver = materialResolver;
         this.protocolManager = ProtocolLibrary.getProtocolManager();
+        this.chunkPacketRewriteDisabled = false;
         fallback.start(config, materialResolver);
         registerPacketListener();
         logger.info("ProtocolLib transport selected. Rewriting outbound block updates and priming chunk delivery.");
@@ -245,44 +247,60 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
     }
 
     private void rewriteChunkPacket(PacketEvent event) {
-        PacketContainer packet = event.getPacket();
-        if (packet.getIntegers().size() < 2 || packet.getLevelChunkData().size() <= 0) {
+        if (chunkPacketRewriteDisabled) {
             return;
         }
 
-        Player player = event.getPlayer();
-        World world = player.getWorld();
-        int chunkX = packet.getIntegers().read(0);
-        int chunkZ = packet.getIntegers().read(1);
-        WrappedLevelChunkData.ChunkData chunkData = packet.getLevelChunkData().read(0);
-        if (chunkData == null || chunkData.getBuffer() == null) {
-            return;
-        }
-
-        ChunkPacketBlockRewriter.RewriteResult result = chunkRewriter.rewrite(
-            chunkData.getBuffer(),
-            world.getUID(),
-            world.getEnvironment(),
-            chunkX,
-            chunkZ,
-            world.getMinHeight(),
-            world.getMaxHeight(),
-            config
-        );
-
-        if (result.failed()) {
-            metrics.recordChunkRewriteFailure();
-            if (!warnedChunkRewriteFailure) {
-                warnedChunkRewriteFailure = true;
-                logger.warning("Could not rewrite a chunk packet: " + result.failure().getMessage());
+        try {
+            PacketContainer packet = event.getPacket();
+            if (packet.getIntegers().size() < 2 || packet.getLevelChunkData().size() <= 0) {
+                disableChunkPacketRewrite("MAP_CHUNK packet shape is not exposed by this ProtocolLib/server version.");
+                return;
             }
-            return;
-        }
 
-        if (result.changed()) {
-            chunkData.setBuffer(result.bytes());
-            packet.getLevelChunkData().write(0, chunkData);
-            metrics.recordChunkPacketRewrite(result.rewrittenEntries());
+            Player player = event.getPlayer();
+            World world = player.getWorld();
+            int chunkX = packet.getIntegers().read(0);
+            int chunkZ = packet.getIntegers().read(1);
+            WrappedLevelChunkData.ChunkData chunkData = packet.getLevelChunkData().read(0);
+            if (chunkData == null || chunkData.getBuffer() == null) {
+                disableChunkPacketRewrite("MAP_CHUNK buffer is not exposed by this ProtocolLib/server version.");
+                return;
+            }
+
+            ChunkPacketBlockRewriter.RewriteResult result = chunkRewriter.rewrite(
+                chunkData.getBuffer(),
+                world.getUID(),
+                world.getEnvironment(),
+                chunkX,
+                chunkZ,
+                world.getMinHeight(),
+                world.getMaxHeight(),
+                config
+            );
+
+            if (result.failed()) {
+                disableChunkPacketRewrite("Could not parse MAP_CHUNK data: " + result.failure().getMessage());
+                return;
+            }
+
+            if (result.changed()) {
+                chunkData.setBuffer(result.bytes());
+                packet.getLevelChunkData().write(0, chunkData);
+                metrics.recordChunkPacketRewrite(result.rewrittenEntries());
+            }
+        } catch (RuntimeException exception) {
+            disableChunkPacketRewrite("Runtime packet access failed: " + exception.getMessage());
+        }
+    }
+
+    private void disableChunkPacketRewrite(String reason) {
+        chunkPacketRewriteDisabled = true;
+        metrics.recordChunkRewriteFailure();
+        if (!warnedChunkRewriteFailure) {
+            warnedChunkRewriteFailure = true;
+            logger.warning("ProtocolLib chunk packet rewrite disabled for this runtime. " + reason
+                + " Oreveil will continue using chunk priming and block update sync fallback.");
         }
     }
 

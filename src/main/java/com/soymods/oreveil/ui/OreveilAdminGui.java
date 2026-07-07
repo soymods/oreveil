@@ -8,6 +8,9 @@ import com.soymods.oreveil.obfuscation.ObfuscationMetrics;
 import com.soymods.oreveil.obfuscation.transport.TransportMode;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import com.soymods.oreveil.world.OreveilWorldGenerationService.WorldRegenerationResult;
+import java.lang.reflect.Method;
+import java.net.MalformedURLException;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -15,8 +18,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.net.MalformedURLException;
-import java.net.URI;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
@@ -851,7 +852,7 @@ public final class OreveilAdminGui implements Listener {
         }
 
         sign.setEditable(true);
-        sign.setAllowedEditorUniqueId(player.getUniqueId());
+        allowSignEditor(sign, player.getUniqueId());
         sign.setLine(0, String.valueOf(input.current()));
         sign.setLine(1, input.title());
         sign.setLine(2, "Min " + input.min() + " Max " + input.max());
@@ -868,6 +869,15 @@ public final class OreveilAdminGui implements Listener {
                 restoreSignInput(input);
             }
         }, 600L);
+    }
+
+    private static void allowSignEditor(Sign sign, UUID playerId) {
+        try {
+            Method method = sign.getClass().getMethod("setAllowedEditorUniqueId", UUID.class);
+            method.invoke(sign, playerId);
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            // Older 1.21 APIs do not expose a per-player sign editor hint.
+        }
     }
 
     private Block findSignInputBlock(Player player) {
