@@ -1,5 +1,6 @@
-package com.soymods.oreveil.compat;
+package com.soymods.oreveil.compat.modern;
 
+import com.soymods.oreveil.compat.ServerCompatibility;
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.obfuscation.ObfuscationMetrics;
 import com.soymods.oreveil.obfuscation.transport.BlockUpdateSyncTransport;

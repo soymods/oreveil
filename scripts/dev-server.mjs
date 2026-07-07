@@ -12,11 +12,12 @@ const props = readProperties(join(root, "gradle.properties"));
 const minecraftVersion = process.env.PAPER_VERSION ?? props.minecraft_version ?? "1.21";
 const archivesBaseName = props.archives_base_name ?? "oreveil";
 const pluginVersion = props.plugin_version ?? "0.1.0-SNAPSHOT";
+const targetName = process.env.OREVEIL_TARGET ?? "paper-1.21";
 const serverDir = join(root, "build", "dev-server");
 const pluginsDir = join(serverDir, "plugins");
 const paperJar = join(serverDir, "paper.jar");
 const protocolLibJar = join(pluginsDir, "ProtocolLib.jar");
-const pluginJar = join(root, "build", "libs", `${archivesBaseName}-${pluginVersion}.jar`);
+const pluginJar = join(root, "build", "libs", `${archivesBaseName}-${targetName}-${pluginVersion}.jar`);
 const deployedPluginJar = join(pluginsDir, `${archivesBaseName}.jar`);
 
 const args = new Set(process.argv.slice(2));

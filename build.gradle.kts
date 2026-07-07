@@ -15,6 +15,12 @@ java {
     withSourcesJar()
 }
 
+val compatModern by sourceSets.creating {
+    java.srcDir("src/compatModern/java")
+    compileClasspath += sourceSets.main.get().output + configurations.compileClasspath.get()
+    runtimeClasspath += output + compileClasspath
+}
+
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
@@ -51,15 +57,31 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.test {
     useJUnitPlatform()
+    classpath += compatModern.output
 }
 
 tasks.jar {
+    dependsOn(tasks.named(compatModern.classesTaskName))
+    archiveBaseName.set("${project.property("archives_base_name")}-paper-1.21")
+    from(compatModern.output)
     manifest {
         attributes(
             "Implementation-Title" to project.name,
             "Implementation-Version" to project.version,
+            "Oreveil-Compatibility-Adapter" to "modern-1.21",
         )
     }
+}
+
+tasks.named<Jar>("sourcesJar") {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(compatModern.allSource)
+}
+
+tasks.register("buildAllTargets") {
+    group = "build"
+    description = "Builds all Oreveil version-targeted plugin jars."
+    dependsOn(tasks.build)
 }
 
 publishing {

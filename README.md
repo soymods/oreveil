@@ -202,7 +202,7 @@ cd oreveil
 ./gradlew build
 ```
 
-Artifacts are written to `build/libs/`.
+Artifacts are written to `build/libs/`. The modern Paper target is named `oreveil-paper-1.21-<version>.jar`.
 
 ### One-Command Dev Server
 
@@ -232,6 +232,7 @@ Useful options:
 - `PAPER_VERSION=<version>`: run a different Paper/Minecraft version than `gradle.properties`.
 - `PAPER_URL=<url>`: use a specific Paper server jar URL instead of the Paper downloads API.
 - `PROTOCOLLIB_URL=<url>`: override the default ProtocolLib download URL.
+- `OREVEIL_TARGET=<target>`: deploy a specific versioned artifact target, defaulting to `paper-1.21`.
 
 In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joining and moving around. For chunk-packet testing, confirm that chunk rewrite packet/entry counters increase and failures stay at `0`.
 
@@ -241,6 +242,8 @@ In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joinin
 - `src/main/java/com/soymods/oreveil/world/`: server-authoritative world model
 - `src/main/java/com/soymods/oreveil/exposure/`: reveal and exposure logic
 - `src/main/java/com/soymods/oreveil/obfuscation/`: packet rewrite pipeline
+- `src/main/java/com/soymods/oreveil/compat/`: version-neutral compatibility contracts and adapter loading
+- `src/compatModern/java/`: Paper `1.21.x` compatibility adapter included in the `paper-1.21` jar
 - `src/main/java/com/soymods/oreveil/listener/`: world and player event synchronization
 - `src/main/java/com/soymods/oreveil/ui/`: in-game admin GUI
 - `src/main/resources/`: plugin metadata and configuration

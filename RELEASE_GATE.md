@@ -33,7 +33,7 @@ Checklist:
   - Known limitations
   - Supported Minecraft and Paper versions
   - ProtocolLib compatibility status
-- Artifact naming follows `oreveil-<pluginVersion>.jar`.
+- Artifact naming follows `oreveil-<target>-<pluginVersion>.jar`, for example `oreveil-paper-1.21-<pluginVersion>.jar`.
 - Modrinth license is set to the custom Oreveil License or All Rights Reserved.
 
 ## 4. Optional But Recommended Before Major Release
