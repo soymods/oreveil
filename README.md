@@ -79,18 +79,34 @@ The goal is to reduce adversarial clients back to standard survival constraints 
 
 ## Administration
 
-Oreveil is designed to be manageable both from configuration files and in-game administration commands.
+Oreveil is designed to be manageable from config files, an in-game admin GUI, and advanced commands.
 
-- Use config-driven policies for protected ores, exposure rules, host block mapping, and transport behavior.
-- Use `/oreveil status` for the compact live control panel.
-- Use `/oreveil help <topic>` for focused command examples. Topics include `settings`, `exposure`, `host`, `ores`, `world`, and `diagnostics`.
-- Use `/oreveil reload` to apply rule changes without restarting the server.
+- Use `/oreveil` to open the admin GUI. Console users can use `/oreveil help`.
+- Use the GUI for the common setup flow: runtime toggles, protected ores, exposure rules, host blocks, xray profile, sync settings, diagnostics, and managed-world actions.
+- Use commands for precise edits, diagnostics, console administration, and workflows that are easier to script.
+- Use `/oreveil help <topic>` for focused command examples. Topics include `settings`, `exposure`, `host`, `ores`, `profile`, `world`, and `diagnostics`.
 - Use `/oreveil inspect` to inspect how a targeted block is currently classified and presented to the client.
 - Use `/oreveil diagnostics` to inspect packet rewrite counters, chunk priming counters, and cached ore/salt index sizes.
 
-### Command Examples
+### Admin GUI
 
-Compact status and inspection:
+Run `/oreveil` in game as an operator or a player with `oreveil.admin`.
+
+The GUI includes:
+
+- runtime controls for obfuscation, reveal behavior, salted distribution, world generation, and transport mode
+- protected ore toggles
+- xray profile selection
+- sync radius controls with plus/minus buttons and exact sign input
+- exposure material selectors with paging
+- dimension host block defaults and per-ore host overrides
+- diagnostics refresh
+- managed-world controls with confirmation screens for create, regenerate, delete, and default-world changes
+- config reload
+
+### Advanced Commands
+
+Compact status, inspection, and diagnostics:
 
 ```mcfunction
 /oreveil status
@@ -101,6 +117,7 @@ Compact status and inspection:
 Editable scalar settings:
 
 ```mcfunction
+/oreveil
 /oreveil settings
 /oreveil settings controls
 /oreveil get live_sync_radius
@@ -112,6 +129,7 @@ Editable scalar settings:
 Protected ores:
 
 ```mcfunction
+/oreveil
 /oreveil ores
 /oreveil ore add DIAMOND_ORE
 /oreveil ore remove COPPER_ORE
@@ -121,6 +139,7 @@ Protected ores:
 Exposure rules:
 
 ```mcfunction
+/oreveil
 /oreveil exposure
 /oreveil exposure adjacent add WATER
 /oreveil exposure adjacent remove LAVA
@@ -130,6 +149,7 @@ Exposure rules:
 Host block mapping:
 
 ```mcfunction
+/oreveil
 /oreveil host
 /oreveil host default NORMAL STONE
 /oreveil host default NETHER NETHERRACK
@@ -140,6 +160,7 @@ Host block mapping:
 Managed world tools:
 
 ```mcfunction
+/oreveil
 /oreveil world status
 /oreveil world target oreveil
 /oreveil world seed random
@@ -188,13 +209,13 @@ node scripts/dev-server.mjs --watch
 Useful options:
 
 - `--reset-world`: delete the disposable `world`, `world_nether`, and `world_the_end` folders before starting.
-- `--no-build`: skip Gradle build and deploy the existing jar.
+- `--no-build`: skip Gradle build and deploy the existing `build/libs/` jar. Run `./gradlew build -q` first if you need fresh code in the jar.
 - `--prepare-only`: download/provision the dev server and deploy the jar, then exit without starting Paper.
 - `PAPER_VERSION=<version>`: run a different Paper/Minecraft version than `gradle.properties`.
 - `PAPER_URL=<url>`: use a specific Paper server jar URL instead of the Paper downloads API.
 - `PROTOCOLLIB_URL=<url>`: override the default ProtocolLib download URL.
 
-In game, run `/oreveil diagnostics` after joining and moving around. For chunk-packet testing, confirm that chunk rewrite packet/entry counters increase and failures stay at `0`.
+In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joining and moving around. For chunk-packet testing, confirm that chunk rewrite packet/entry counters increase and failures stay at `0`.
 
 ### Project Layout
 
@@ -203,6 +224,7 @@ In game, run `/oreveil diagnostics` after joining and moving around. For chunk-p
 - `src/main/java/com/soymods/oreveil/exposure/`: reveal and exposure logic
 - `src/main/java/com/soymods/oreveil/obfuscation/`: packet rewrite pipeline
 - `src/main/java/com/soymods/oreveil/listener/`: world and player event synchronization
+- `src/main/java/com/soymods/oreveil/ui/`: in-game admin GUI
 - `src/main/resources/`: plugin metadata and configuration
 
 ## Version Information
