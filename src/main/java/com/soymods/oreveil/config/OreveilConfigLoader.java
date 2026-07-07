@@ -42,6 +42,7 @@ public final class OreveilConfigLoader {
             Math.max(16, config.getInt("obfuscation.live-sync-radius-blocks", 64)),
             Math.max(0, config.getInt("obfuscation.initial-sync-chunk-radius", 0)),
             config.getBoolean("world-model.salted-distribution", true),
+            XrayProfile.fromConfig(config.getString("world-model.xray-profile", "balanced")),
             Math.max(1, config.getInt("world-model.salt-density", 96)),
             parseLong(config.get("world-model.salt-secret"), "world-model.salt-secret", 0L),
             config.getString("transport.mode", "BLOCK_UPDATE_SYNC"),

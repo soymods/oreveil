@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.soymods.oreveil.config.OreveilConfig;
+import com.soymods.oreveil.config.XrayProfile;
 import java.io.ByteArrayOutputStream;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -201,6 +202,7 @@ final class ChunkPacketBlockRewriterTest {
             64,
             0,
             false,
+            XrayProfile.BALANCED,
             64,
             0L,
             "AUTO",

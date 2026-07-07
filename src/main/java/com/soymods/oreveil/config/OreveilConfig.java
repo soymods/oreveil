@@ -14,6 +14,7 @@ public record OreveilConfig(
     int liveSyncRadiusBlocks,
     int initialSyncChunkRadius,
     boolean saltedDistributionEnabled,
+    XrayProfile xrayProfile,
     int saltDensity,
     long saltSecret,
     String transportMode,

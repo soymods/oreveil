@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.config.OreveilWorldGenerationConfig;
+import com.soymods.oreveil.config.XrayProfile;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import org.bukkit.Material;
@@ -48,6 +49,7 @@ final class HostBlockResolverTest {
             64,
             0,
             false,
+            XrayProfile.BALANCED,
             64,
             0L,
             "AUTO",

@@ -46,7 +46,11 @@ exposure:
 
 world-model:
   salted-distribution: true
-  # Number of salt block placement attempts per chunk.
+  # Preset controlling fake ore density, rare ore caps, weighting, vein size, and performance.
+  # salt-density is the baseline budget before the profile multiplier is applied.
+  # Options: vanilla-friendly, balanced, aggressive, performance
+  xray-profile: balanced
+  # Rough fake ore block budget per chunk. Fake ore is generated in buried vein-like clusters.
   # Higher values increase the density of fake ore signals seen by X-ray users.
   salt-density: 96
   # Server-private salt for fake ore placement. Change this to a random long before

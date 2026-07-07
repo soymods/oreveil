@@ -3,6 +3,7 @@ package com.soymods.oreveil.command;
 import com.soymods.oreveil.bootstrap.OreveilPlugin;
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.config.OreveilWorldGenerationConfig;
+import com.soymods.oreveil.config.XrayProfile;
 import com.soymods.oreveil.exposure.ExposureService;
 import com.soymods.oreveil.obfuscation.ObfuscationMetrics;
 import com.soymods.oreveil.obfuscation.transport.TransportMode;
@@ -78,6 +79,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             case "toggle" -> handleToggle(sender, label, args);
             case "set" -> handleSet(sender, label, args);
             case "transport" -> handleTransport(sender, label, args);
+            case "profile" -> handleProfile(sender, label, args);
             case "world" -> handleWorld(sender, label, args);
             default -> {
                 sendError(sender, "Unknown subcommand. Use /" + label + " help.");
@@ -105,11 +107,12 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
                 "toggle",
                 "set",
                 "transport",
+                "profile",
                 "world"
             ));
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("help")) {
-            return filter(args[1], List.of("settings", "exposure", "host", "ores", "world", "diagnostics"));
+            return filter(args[1], List.of("settings", "exposure", "host", "ores", "profile", "world", "diagnostics"));
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("ore")) {
             return filter(args[1], List.of("add", "remove", "toggle"));
@@ -159,6 +162,9 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("transport")) {
             return filter(args[1], Arrays.stream(TransportMode.values()).map(Enum::name).toList());
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("profile")) {
+            return filter(args[1], XrayProfile.configNames());
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("world")) {
             return filter(args[1], List.of("status", "target", "seed", "create", "regenerate", "delete", "tp", "default"));
@@ -347,6 +353,12 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             sender,
             "World",
             WORLD,
+            profileControl(config.xrayProfile(), label)
+        );
+        sendMessage(
+            sender,
+            "World",
+            WORLD,
             numericControl(ConfigSetting.SALT_DENSITY, config.saltDensity(), label)
         );
         sendMessage(
@@ -360,6 +372,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleDiagnostics(CommandSender sender) {
+        OreveilConfig config = plugin.oreveilConfig();
         ObfuscationMetrics.Snapshot metrics = plugin.obfuscationService().metricsSnapshot();
         AuthoritativeWorldModel.CacheStats cacheStats = plugin.cacheStats();
 
@@ -436,11 +449,62 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             sender,
             "Ores",
             ORES,
+            Component.text("Xray profile: ", BASE)
+                .append(highlight(config.xrayProfile().configName(), ORES))
+                .append(Component.text("  salt budget=", BASE))
+                .append(highlight(String.valueOf(config.xrayProfile().effectiveSaltBudget(config.saltDensity())), ORES))
+                .append(Component.text("  rare cap=", BASE))
+                .append(highlight(String.valueOf(config.xrayProfile().maxRareOreBlocks(config.xrayProfile().effectiveSaltBudget(config.saltDensity()))), ORES))
+                .append(Component.text(" from baseline ", BASE))
+                .append(highlight(String.valueOf(config.saltDensity()), ORES))
+        );
+        sendMessage(
+            sender,
+            "Ores",
+            ORES,
             Component.text("Fake ore types: ", BASE)
                 .append(highlight(formatMaterialCounts(cacheStats.saltBlocksByType()), ORES))
         );
         sendDivider(sender);
         return true;
+    }
+
+    private boolean handleProfile(CommandSender sender, String label, String[] args) {
+        if (args.length < 2) {
+            sendDivider(sender);
+            sendMessage(sender, "World", WORLD, profileControl(plugin.oreveilConfig().xrayProfile(), label));
+            sendMessage(
+                sender,
+                "World",
+                WORLD,
+                Component.text("Use ", BASE)
+                    .append(highlight("/" + label + " profile <preset>", WORLD))
+                    .append(Component.text(" or ", BASE))
+                    .append(highlight("/" + label + " set xray_profile <preset>", WORLD))
+                    .append(Component.text(".", BASE))
+            );
+            sendDivider(sender);
+            return true;
+        }
+
+        XrayProfile profile = XrayProfile.parse(args[1]);
+        if (profile == null) {
+            sendError(sender, "Unknown profile " + args[1] + ". Options: " + String.join(", ", XrayProfile.configNames()) + ".");
+            return true;
+        }
+
+        OreveilConfig config = plugin.setStringSetting(ConfigSetting.XRAY_PROFILE.path(), profile.configName());
+        sendMessage(
+            sender,
+            "World",
+            WORLD,
+            Component.text("Xray profile is now ", BASE)
+                .append(highlight(config.xrayProfile().configName(), WORLD))
+                .append(Component.text(" with salt budget ", BASE))
+                .append(highlight(String.valueOf(config.xrayProfile().effectiveSaltBudget(config.saltDensity())), WORLD))
+                .append(Component.text(".", BASE))
+        );
+        return handleStatus(sender, label);
     }
 
     private boolean handleWorld(CommandSender sender, String label, String[] args) {
@@ -1146,6 +1210,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         sendMessage(sender, "Status", STATUS, commandLine("/" + label + " status", STATUS, "Shows the live control panel."));
         sendMessage(sender, "Status", STATUS, commandLine("/" + label + " diagnostics", STATUS, "Shows packet rewrite and cache counters."));
         sendMessage(sender, "Status", STATUS, commandLine("/" + label + " inspect", STATUS, "Inspects the targeted block."));
+        sendMessage(sender, "World", WORLD, commandLine("/" + label + " profile <preset>", WORLD, "Changes the fake-ore behavior preset."));
         sendMessage(sender, "Ores", ORES, commandLine("/" + label + " ores", ORES, "Opens the clickable ore selector."));
         sendMessage(sender, "Ores", ORES, commandLine("/" + label + " ore <add|remove|toggle> <ore>", ORES, "Edits protected ore materials."));
         sendMessage(sender, "Controls", CONTROLS, commandLine("/" + label + " exposure", CONTROLS, "Edits exposure material lists."));
@@ -1171,11 +1236,12 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             case "exposure" -> sendExposureHelp(sender, label);
             case "host" -> sendHostHelp(sender, label);
             case "ores", "ore" -> sendOresHelp(sender, label);
+            case "profile", "profiles" -> sendProfileHelp(sender, label);
             case "world" -> sendWorldHelp(sender, label);
             case "diagnostics", "diag" -> sendDiagnosticsHelp(sender, label);
             default -> {
                 sendError(sender, "Unknown help topic " + rawTopic + ".");
-                sendMessage(sender, "Oreveil", CONTROLS, Component.text("Topics: settings, exposure, host, ores, world, diagnostics.", BASE));
+                sendMessage(sender, "Oreveil", CONTROLS, Component.text("Topics: settings, exposure, host, ores, profile, world, diagnostics.", BASE));
             }
         }
     }
@@ -1187,6 +1253,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " settings world", WORLD, "Shows compact controls for world-model and managed-world settings."));
         sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " get live_sync_radius", CONTROLS, "Shows one current value and config path."));
         sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " explain salt_density", CONTROLS, "Shows one setting's meaning and example command."));
+        sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " set xray_profile aggressive", WORLD, "Changes the fake-ore behavior preset."));
         sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " set live_sync_radius 96", CONTROLS, "Sets one scalar value."));
         sendDivider(sender);
     }
@@ -1217,6 +1284,15 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         sendMessage(sender, "Ores", ORES, commandLine("/" + label + " ore add DIAMOND_ORE", ORES, "Starts hiding an ore material."));
         sendMessage(sender, "Ores", ORES, commandLine("/" + label + " ore remove COPPER_ORE", ORES, "Stops hiding an ore material."));
         sendMessage(sender, "Ores", ORES, commandLine("/" + label + " ore toggle ANCIENT_DEBRIS", ORES, "Toggles one ore material."));
+        sendDivider(sender);
+    }
+
+    private void sendProfileHelp(CommandSender sender, String label) {
+        sendDivider(sender);
+        sendMessage(sender, "World", WORLD, commandLine("/" + label + " profile", WORLD, "Shows clickable xray profile presets."));
+        sendMessage(sender, "World", WORLD, commandLine("/" + label + " profile balanced", WORLD, "Uses the baseline fake-ore budget."));
+        sendMessage(sender, "World", WORLD, commandLine("/" + label + " profile aggressive", WORLD, "Raises fake-ore pressure for xray users."));
+        sendMessage(sender, "World", WORLD, commandLine("/" + label + " set xray_profile performance", WORLD, "Uses the generic settings command for the same preset."));
         sendDivider(sender);
     }
 
@@ -1480,6 +1556,40 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
                 .hoverEvent(HoverEvent.showText(
                     Component.text(active ? "Current transport mode." : "Switch transport to ", BASE)
                         .append(Component.text(mode.name(), active ? ACTIVE : STATUS))
+                )));
+        }
+        return row;
+    }
+
+    private Component profileControl(XrayProfile selected, String label) {
+        Component row = Component.text(ConfigSetting.XRAY_PROFILE.displayName() + ": ", BASE)
+            .append(highlight(selected.configName(), WORLD))
+            .append(Component.text("  ", BASE));
+        boolean first = true;
+        for (XrayProfile profile : XrayProfile.values()) {
+            if (!first) {
+                row = row.append(Component.text("  •  ", MUTED));
+            }
+            first = false;
+
+            boolean active = profile == selected;
+            row = row.append(Component.text(profile.configName(), active ? ACTIVE : WORLD)
+                .clickEvent(ClickEvent.runCommand("/" + label + " profile " + profile.configName()))
+                .hoverEvent(HoverEvent.showText(
+                    Component.text(active ? "Current xray profile. " : "Switch xray profile to ", BASE)
+                        .append(Component.text(profile.displayName(), active ? ACTIVE : WORLD))
+                        .append(Component.text(
+                            " (budget "
+                                + Math.round(profile.saltDensityMultiplier() * 100.0D)
+                                + "%, common "
+                                + Math.round(profile.commonOreWeightMultiplier() * 100.0D)
+                                + "%, rare "
+                                + Math.round(profile.rareOreWeightMultiplier() * 100.0D)
+                                + "%, veins "
+                                + Math.round(profile.veinSizeMultiplier() * 100.0D)
+                                + "%).",
+                            BASE
+                        ))
                 )));
         }
         return row;
@@ -1813,6 +1923,21 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             List.of(),
             "Enables server-private fake ore signals backed by the salt model.",
             OreveilConfig::saltedDistributionEnabled
+        ),
+        XRAY_PROFILE(
+            "xray_profile",
+            "world-model.xray-profile",
+            "Xray Profile",
+            "World",
+            WORLD,
+            SettingType.ENUM,
+            0,
+            0,
+            0,
+            XrayProfile.configNames(),
+            XrayProfile.configNames(),
+            "Preset controlling the fake ore density and performance tradeoff. Salt density remains the baseline.",
+            config -> config.xrayProfile().configName()
         ),
         SALT_DENSITY(
             "salt_density",

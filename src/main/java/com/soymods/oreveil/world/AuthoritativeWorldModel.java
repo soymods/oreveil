@@ -1,6 +1,8 @@
 package com.soymods.oreveil.world;
 
 import com.soymods.oreveil.config.OreveilConfig;
+import com.soymods.oreveil.config.XrayProfile;
+import com.soymods.oreveil.config.XrayProfile.OreRarity;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -64,28 +66,36 @@ public final class AuthoritativeWorldModel {
     ) {
     }
 
-    private record SaltOreRule(Material material, World.Environment environment, int minY, int maxY, int weight) {}
+    private record SaltOreRule(
+        Material material,
+        World.Environment environment,
+        int minY,
+        int maxY,
+        int weight,
+        int veinMin,
+        int veinMax
+    ) {}
 
     private static final List<SaltOreRule> SALT_ORE_RULES = List.of(
-        new SaltOreRule(Material.COAL_ORE, World.Environment.NORMAL, 0, 192, 24),
-        new SaltOreRule(Material.DEEPSLATE_COAL_ORE, World.Environment.NORMAL, -64, 16, 10),
-        new SaltOreRule(Material.COPPER_ORE, World.Environment.NORMAL, -16, 112, 22),
-        new SaltOreRule(Material.DEEPSLATE_COPPER_ORE, World.Environment.NORMAL, -64, 16, 8),
-        new SaltOreRule(Material.IRON_ORE, World.Environment.NORMAL, -24, 96, 20),
-        new SaltOreRule(Material.DEEPSLATE_IRON_ORE, World.Environment.NORMAL, -64, 16, 14),
-        new SaltOreRule(Material.GOLD_ORE, World.Environment.NORMAL, -64, 32, 8),
-        new SaltOreRule(Material.DEEPSLATE_GOLD_ORE, World.Environment.NORMAL, -64, 16, 8),
-        new SaltOreRule(Material.REDSTONE_ORE, World.Environment.NORMAL, -64, 16, 7),
-        new SaltOreRule(Material.DEEPSLATE_REDSTONE_ORE, World.Environment.NORMAL, -64, 16, 10),
-        new SaltOreRule(Material.LAPIS_ORE, World.Environment.NORMAL, -64, 64, 5),
-        new SaltOreRule(Material.DEEPSLATE_LAPIS_ORE, World.Environment.NORMAL, -64, 16, 6),
-        new SaltOreRule(Material.DIAMOND_ORE, World.Environment.NORMAL, -64, 16, 2),
-        new SaltOreRule(Material.DEEPSLATE_DIAMOND_ORE, World.Environment.NORMAL, -64, 16, 3),
-        new SaltOreRule(Material.EMERALD_ORE, World.Environment.NORMAL, 16, 256, 1),
-        new SaltOreRule(Material.DEEPSLATE_EMERALD_ORE, World.Environment.NORMAL, -64, 16, 1),
-        new SaltOreRule(Material.NETHER_QUARTZ_ORE, World.Environment.NETHER, 10, 118, 28),
-        new SaltOreRule(Material.NETHER_GOLD_ORE, World.Environment.NETHER, 10, 118, 16),
-        new SaltOreRule(Material.ANCIENT_DEBRIS, World.Environment.NETHER, 8, 24, 1)
+        new SaltOreRule(Material.COAL_ORE, World.Environment.NORMAL, 0, 192, 24, 5, 13),
+        new SaltOreRule(Material.DEEPSLATE_COAL_ORE, World.Environment.NORMAL, -64, 16, 10, 4, 10),
+        new SaltOreRule(Material.COPPER_ORE, World.Environment.NORMAL, -16, 112, 22, 4, 10),
+        new SaltOreRule(Material.DEEPSLATE_COPPER_ORE, World.Environment.NORMAL, -64, 16, 8, 3, 8),
+        new SaltOreRule(Material.IRON_ORE, World.Environment.NORMAL, -24, 96, 20, 4, 9),
+        new SaltOreRule(Material.DEEPSLATE_IRON_ORE, World.Environment.NORMAL, -64, 16, 14, 3, 8),
+        new SaltOreRule(Material.GOLD_ORE, World.Environment.NORMAL, -64, 32, 8, 2, 7),
+        new SaltOreRule(Material.DEEPSLATE_GOLD_ORE, World.Environment.NORMAL, -64, 16, 8, 2, 7),
+        new SaltOreRule(Material.REDSTONE_ORE, World.Environment.NORMAL, -64, 16, 7, 3, 8),
+        new SaltOreRule(Material.DEEPSLATE_REDSTONE_ORE, World.Environment.NORMAL, -64, 16, 10, 4, 9),
+        new SaltOreRule(Material.LAPIS_ORE, World.Environment.NORMAL, -64, 64, 5, 2, 6),
+        new SaltOreRule(Material.DEEPSLATE_LAPIS_ORE, World.Environment.NORMAL, -64, 16, 6, 2, 6),
+        new SaltOreRule(Material.DIAMOND_ORE, World.Environment.NORMAL, -64, 16, 2, 1, 4),
+        new SaltOreRule(Material.DEEPSLATE_DIAMOND_ORE, World.Environment.NORMAL, -64, 16, 3, 1, 5),
+        new SaltOreRule(Material.EMERALD_ORE, World.Environment.NORMAL, 16, 256, 1, 1, 2),
+        new SaltOreRule(Material.DEEPSLATE_EMERALD_ORE, World.Environment.NORMAL, -64, 16, 1, 1, 2),
+        new SaltOreRule(Material.NETHER_QUARTZ_ORE, World.Environment.NETHER, 10, 118, 28, 5, 14),
+        new SaltOreRule(Material.NETHER_GOLD_ORE, World.Environment.NETHER, 10, 118, 16, 3, 10),
+        new SaltOreRule(Material.ANCIENT_DEBRIS, World.Environment.NETHER, 8, 24, 1, 1, 3)
     );
 
     public AuthoritativeWorldModel(Plugin plugin, Logger logger, OreveilConfig config) {
@@ -370,27 +380,21 @@ public final class AuthoritativeWorldModel {
 
         int baseX = chunk.getX() << 4;
         int baseZ = chunk.getZ() << 4;
-        int attempts = config.saltDensity();
+        XrayProfile profile = config.xrayProfile();
+        int targetBlocks = profile.effectiveSaltBudget(config.saltDensity());
+        int rareBlockLimit = profile.maxRareOreBlocks(targetBlocks);
+        int attempts = Math.max(1, targetBlocks / 3);
 
-        for (int i = 0; i < attempts; i++) {
+        for (int i = 0; i < attempts && salt.size() < targetBlocks; i++) {
+            SaltOreRule rule = pickSaltOreRule(candidates, rng, profile, salt, rareBlockLimit);
+            if (rule == null) {
+                return;
+            }
             int lx = rng.nextInt(16);
-            int y = minY + rng.nextInt(maxY - minY);
+            int y = Math.max(minY, rule.minY()) + rng.nextInt(Math.max(1, Math.min(maxY - 1, rule.maxY()) - Math.max(minY, rule.minY()) + 1));
             int lz = rng.nextInt(16);
 
-            Block block = world.getBlockAt(baseX + lx, y, baseZ + lz);
-            Material type = block.getType();
-
-            if (!SALT_HOSTS.contains(type)) {
-                continue;
-            }
-            if (config.protectedOres().contains(type) || isExposed(block)) {
-                continue;
-            }
-
-            Material saltOre = pickSaltOre(type, y, candidates, rng);
-            if (saltOre != null) {
-                salt.put(packLocal(lx, y, lz), saltOre);
-            }
+            growSaltVein(world, baseX, baseZ, lx, y, lz, rule, rng, salt, targetBlocks, profile, rareBlockLimit);
         }
     }
 
@@ -401,27 +405,156 @@ public final class AuthoritativeWorldModel {
             .toList();
     }
 
-    private static Material pickSaltOre(Material host, int y, List<SaltOreRule> candidates, Random rng) {
-        List<SaltOreRule> matching = candidates.stream()
-            .filter(rule -> y >= rule.minY() && y <= rule.maxY())
-            .filter(rule -> matchesHost(rule.material(), host))
-            .toList();
-        if (matching.isEmpty()) {
+    private static SaltOreRule pickSaltOreRule(
+        List<SaltOreRule> candidates,
+        Random rng,
+        XrayProfile profile,
+        Map<Integer, Material> salt,
+        int rareBlockLimit
+    ) {
+        if (candidates.isEmpty()) {
             return null;
         }
 
         int totalWeight = 0;
-        for (SaltOreRule rule : matching) {
-            totalWeight += rule.weight();
+        for (SaltOreRule rule : candidates) {
+            if (isRareSaltOre(rule.material()) && countRareSaltBlocks(salt) >= rareBlockLimit) {
+                continue;
+            }
+            totalWeight += profile.effectiveWeight(rule.weight(), rarityOf(rule.material()));
         }
+        if (totalWeight <= 0) {
+            return null;
+        }
+
         int roll = rng.nextInt(Math.max(1, totalWeight));
-        for (SaltOreRule rule : matching) {
-            roll -= rule.weight();
+        for (SaltOreRule rule : candidates) {
+            if (isRareSaltOre(rule.material()) && countRareSaltBlocks(salt) >= rareBlockLimit) {
+                continue;
+            }
+            roll -= profile.effectiveWeight(rule.weight(), rarityOf(rule.material()));
             if (roll < 0) {
-                return rule.material();
+                return rule;
             }
         }
-        return matching.getLast().material();
+        return candidates.getLast();
+    }
+
+    private void growSaltVein(
+        World world,
+        int baseX,
+        int baseZ,
+        int startLx,
+        int startY,
+        int startLz,
+        SaltOreRule rule,
+        Random rng,
+        Map<Integer, Material> salt,
+        int targetBlocks,
+        XrayProfile profile,
+        int rareBlockLimit
+    ) {
+        int baseVeinSize = rule.veinMin() + rng.nextInt(Math.max(1, rule.veinMax() - rule.veinMin() + 1));
+        int veinSize = profile.effectiveVeinSize(baseVeinSize);
+        List<int[]> vein = new ArrayList<>();
+        tryAddSaltBlock(world, baseX, baseZ, startLx, startY, startLz, rule, salt, vein, rareBlockLimit);
+
+        int guard = veinSize * 10;
+        while (vein.size() < veinSize && salt.size() < targetBlocks && guard-- > 0) {
+            int[] origin = vein.isEmpty()
+                ? new int[]{startLx, startY, startLz}
+                : vein.get(rng.nextInt(vein.size()));
+            BlockFace face = CARDINAL_FACES[rng.nextInt(CARDINAL_FACES.length)];
+            tryAddSaltBlock(
+                world,
+                baseX,
+                baseZ,
+                origin[0] + face.getModX(),
+                origin[1] + face.getModY(),
+                origin[2] + face.getModZ(),
+                rule,
+                salt,
+                vein,
+                rareBlockLimit
+            );
+        }
+    }
+
+    private void tryAddSaltBlock(
+        World world,
+        int baseX,
+        int baseZ,
+        int lx,
+        int y,
+        int lz,
+        SaltOreRule rule,
+        Map<Integer, Material> salt,
+        List<int[]> vein,
+        int rareBlockLimit
+    ) {
+        if (lx < 0 || lx > 15 || lz < 0 || lz > 15 || y < rule.minY() || y > rule.maxY()) {
+            return;
+        }
+        if (y < world.getMinHeight() || y >= world.getMaxHeight()) {
+            return;
+        }
+
+        int packed = packLocal(lx, y, lz);
+        if (salt.containsKey(packed)) {
+            return;
+        }
+        if (isRareSaltOre(rule.material()) && countRareSaltBlocks(salt) >= rareBlockLimit) {
+            return;
+        }
+
+        Block block = world.getBlockAt(baseX + lx, y, baseZ + lz);
+        Material type = block.getType();
+        if (!SALT_HOSTS.contains(type)
+            || config.protectedOres().contains(type)
+            || !matchesHost(rule.material(), type)
+            || isExposed(block)) {
+            return;
+        }
+
+        salt.put(packed, rule.material());
+        vein.add(new int[]{lx, y, lz});
+    }
+
+    private static OreRarity rarityOf(Material material) {
+        if (isRareSaltOre(material)) {
+            return OreRarity.RARE;
+        }
+        return switch (material) {
+            case COAL_ORE,
+                DEEPSLATE_COAL_ORE,
+                COPPER_ORE,
+                DEEPSLATE_COPPER_ORE,
+                IRON_ORE,
+                DEEPSLATE_IRON_ORE,
+                NETHER_QUARTZ_ORE -> OreRarity.COMMON;
+            default -> OreRarity.NORMAL;
+        };
+    }
+
+    private static boolean isRareSaltOre(Material material) {
+        return switch (material) {
+            case DIAMOND_ORE,
+                DEEPSLATE_DIAMOND_ORE,
+                EMERALD_ORE,
+                DEEPSLATE_EMERALD_ORE,
+                ANCIENT_DEBRIS -> true;
+            default -> false;
+        };
+    }
+
+    private static int countRareSaltBlocks(Map<Integer, Material> salt) {
+        int count = 0;
+        for (Material material : salt.values()) {
+            if (isRareSaltOre(material)) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private static boolean matchesHost(Material ore, Material host) {
