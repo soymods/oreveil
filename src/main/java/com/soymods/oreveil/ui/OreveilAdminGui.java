@@ -15,6 +15,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.net.MalformedURLException;
+import java.net.URI;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
@@ -37,6 +39,8 @@ import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.profile.PlayerProfile;
 
 public final class OreveilAdminGui implements Listener {
     private static final TextColor TITLE = TextColor.color(0x7EA7FF);
@@ -170,7 +174,7 @@ public final class OreveilAdminGui implements Listener {
             "Packet rewrite counters",
             "Cache and fake-ore index status"
         ));
-        inventory.setItem(22, item(Material.CHEST, "Reload Config", TITLE,
+        inventory.setItem(22, head(HeadIcon.REFRESH, "Reload Config", TITLE,
             "Reload Oreveil config and runtime state."
         ));
         inventory.setItem(23, item(Material.MAP, "Managed World", WORLD,
@@ -234,14 +238,14 @@ public final class OreveilAdminGui implements Listener {
 
         back(inventory, 45);
         if (page > 0) {
-            inventory.setItem(48, item(Material.ARROW, "Previous Page", TITLE, "Page " + page + "."));
+            inventory.setItem(48, head(HeadIcon.LEFT, "Previous Page", TITLE, "Page " + page + "."));
         }
-        inventory.setItem(49, item(Material.BOOK, kind.displayName(), CONTROLS,
+        inventory.setItem(49, head(HeadIcon.INFO, kind.displayName(), CONTROLS,
             "Page " + (page + 1) + " of " + Math.max(1, (int) Math.ceil(materials.size() / (double) MATERIAL_PAGE_SIZE)),
             materials.size() + " block materials available."
         ));
         if (start + MATERIAL_PAGE_SIZE < materials.size()) {
-            inventory.setItem(50, item(Material.ARROW, "Next Page", TITLE, "Page " + (page + 2) + "."));
+            inventory.setItem(50, head(HeadIcon.RIGHT, "Next Page", TITLE, "Page " + (page + 2) + "."));
         }
     }
 
@@ -342,7 +346,7 @@ public final class OreveilAdminGui implements Listener {
                 selected ? "Currently selected." : "Click to use this host block."
             ));
         }
-        inventory.setItem(15, item(Material.BARRIER, "Clear Override", ERROR,
+        inventory.setItem(15, head(HeadIcon.X, "Clear Override", ERROR,
             "Use the dimension default instead."
         ));
         back(inventory, 22);
@@ -372,7 +376,7 @@ public final class OreveilAdminGui implements Listener {
             "Salt budget: " + config.xrayProfile().effectiveSaltBudget(config.saltDensity()),
             "Rare cap: " + config.xrayProfile().maxRareOreBlocks(config.xrayProfile().effectiveSaltBudget(config.saltDensity()))
         ));
-        inventory.setItem(22, item(Material.CHEST, "Refresh", TITLE, "Click to refresh diagnostics."));
+        inventory.setItem(22, head(HeadIcon.REFRESH, "Refresh", TITLE, "Click to refresh diagnostics."));
         back(inventory, 26);
     }
 
@@ -415,8 +419,8 @@ public final class OreveilAdminGui implements Listener {
             action.warning(world.targetWorldName()),
             "Click confirm to continue."
         ));
-        inventory.setItem(15, item(Material.LIME_CONCRETE, "Confirm", ORES, true, action.confirmLore(world.targetWorldName())));
-        inventory.setItem(22, item(Material.BARRIER, "Cancel", ERROR, "Return to managed-world controls."));
+        inventory.setItem(15, head(HeadIcon.CHECK, "Confirm", ORES, true, action.confirmLore(world.targetWorldName())));
+        inventory.setItem(22, head(HeadIcon.X, "Cancel", ERROR, "Return to managed-world controls."));
     }
 
     private void handleClick(Player player, Screen screen, int page, Material target, int slot) {
@@ -721,9 +725,9 @@ public final class OreveilAdminGui implements Listener {
     }
 
     private void numericRow(Inventory inventory, int startSlot, String title, Material icon, int value, int step) {
-        inventory.setItem(startSlot, item(Material.RED_STAINED_GLASS_PANE, "-" + step, ERROR, "Lower " + title + "."));
+        inventory.setItem(startSlot, head(HeadIcon.MINUS, "-" + step, ERROR, "Lower " + title + "."));
         inventory.setItem(startSlot + 1, item(icon, title, CONTROLS, "Current: " + value, "Click for exact sign input."));
-        inventory.setItem(startSlot + 2, item(Material.LIME_STAINED_GLASS_PANE, "+" + step, ORES, "Raise " + title + "."));
+        inventory.setItem(startSlot + 2, head(HeadIcon.PLUS, "+" + step, ORES, "Raise " + title + "."));
     }
 
     private void host(Inventory inventory, int slot, World.Environment environment, Material icon, Material current) {
@@ -764,6 +768,37 @@ public final class OreveilAdminGui implements Listener {
         return stack;
     }
 
+    private ItemStack head(HeadIcon icon, String name, TextColor color, String... lore) {
+        return head(icon, name, color, false, lore);
+    }
+
+    private ItemStack head(HeadIcon icon, String name, TextColor color, boolean active, String... lore) {
+        ItemStack stack = new ItemStack(Material.PLAYER_HEAD);
+        if (!(stack.getItemMeta() instanceof SkullMeta meta)) {
+            return item(icon.fallback(), name, color, active, lore);
+        }
+
+        meta.displayName(Component.text(name, color));
+        List<Component> lines = new ArrayList<>();
+        for (String line : lore) {
+            lines.add(Component.text(line, NamedTextColor.GRAY));
+        }
+        meta.lore(lines);
+        try {
+            PlayerProfile profile = Bukkit.createPlayerProfile(UUID.nameUUIDFromBytes(icon.textureUrl().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            profile.getTextures().setSkin(URI.create(icon.textureUrl()).toURL());
+            meta.setOwnerProfile(profile);
+        } catch (MalformedURLException | IllegalArgumentException exception) {
+            return item(icon.fallback(), name, color, active, lore);
+        }
+        if (active) {
+            meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        }
+        stack.setItemMeta(meta);
+        return stack;
+    }
+
     private void fill(Inventory inventory, int size) {
         ItemStack filler = item(Material.BLACK_STAINED_GLASS_PANE, " ", MUTED);
         for (int slot = 0; slot < size; slot++) {
@@ -772,7 +807,7 @@ public final class OreveilAdminGui implements Listener {
     }
 
     private void back(Inventory inventory, int slot) {
-        inventory.setItem(slot, item(Material.ARROW, "Back", TITLE, "Return to the main Oreveil menu."));
+        inventory.setItem(slot, head(HeadIcon.LEFT, "Back", TITLE, "Return to the previous Oreveil menu."));
     }
 
     private void adjustInteger(String path, int current, int delta, int min, int max) {
@@ -1063,6 +1098,33 @@ public final class OreveilAdminGui implements Listener {
 
         Screen screen() {
             return screen;
+        }
+    }
+
+    private enum HeadIcon {
+        LEFT("http://textures.minecraft.net/texture/37aee9a75bf0df7897183015cca0b2a7d755c63388ff01752d5f4419fc645", Material.ARROW),
+        RIGHT("http://textures.minecraft.net/texture/682ad1b9cb4dd21259c0d75aa315ff389c3cef752be3949338164bac84a96e", Material.ARROW),
+        CHECK("http://textures.minecraft.net/texture/a79a5c95ee17abfef45c8dc224189964944d560f19a44f19f8a46aef3fee4756", Material.LIME_CONCRETE),
+        X("http://textures.minecraft.net/texture/27548362a24c0fa8453e4d93e68c5969ddbde57bf6666c0319c1ed1e84d89065", Material.BARRIER),
+        PLUS("http://textures.minecraft.net/texture/9a2d891c6ae9f6baa040d736ab84d48344bb6b70d7f1a280dd12cbac4d777", Material.LIME_STAINED_GLASS_PANE),
+        MINUS("http://textures.minecraft.net/texture/935e4e26eafc11b52c11668e1d6634e7d1d0d21c411cb085f9394268eb4cdfba", Material.RED_STAINED_GLASS_PANE),
+        INFO("http://textures.minecraft.net/texture/d01afe973c5482fdc71e6aa10698833c79c437f21308ea9a1a095746ec274a0f", Material.BOOK),
+        REFRESH("http://textures.minecraft.net/texture/3a4fab3fd97eb7ecf48ab4fd327e093e886f4e217aab69585313c27a5035831a", Material.CHEST);
+
+        private final String textureUrl;
+        private final Material fallback;
+
+        HeadIcon(String textureUrl, Material fallback) {
+            this.textureUrl = textureUrl;
+            this.fallback = fallback;
+        }
+
+        String textureUrl() {
+            return textureUrl;
+        }
+
+        Material fallback() {
+            return fallback;
         }
     }
 
