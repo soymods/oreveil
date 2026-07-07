@@ -202,7 +202,10 @@ cd oreveil
 ./gradlew build
 ```
 
-Artifacts are written to `build/libs/`. The modern Paper target is named `oreveil-paper-1.21-<version>.jar`.
+Artifacts are written to `build/libs/`. Current versioned targets are:
+
+- `oreveil-paper-1.21-<version>.jar`
+- `oreveil-paper-1.18-<version>.jar`
 
 ### One-Command Dev Server
 
@@ -212,7 +215,20 @@ Use the dev-server script to build Oreveil, provision a disposable Paper server 
 node scripts/dev-server.mjs
 ```
 
-Then join `localhost:25565` from a client matching the Paper version under test. To auto-op your offline-mode test player on first setup:
+To run a specific target, set `PAPER_VERSION`; the script picks the matching Oreveil jar target automatically:
+
+```bash
+PAPER_VERSION=1.18.2 node scripts/dev-server.mjs
+PAPER_VERSION=1.21.4 node scripts/dev-server.mjs
+```
+
+If `25565` is already in use, the script automatically picks the next available port and prints the join address. Use `SERVER_PORT` to pin a specific port:
+
+```bash
+PAPER_VERSION=1.18.2 SERVER_PORT=25566 node scripts/dev-server.mjs
+```
+
+Then join the printed `localhost:<port>` from a client matching the Paper version under test. To auto-op your offline-mode test player on first setup:
 
 ```bash
 MC_USERNAME=YourName node scripts/dev-server.mjs
@@ -229,10 +245,11 @@ Useful options:
 - `--reset-world`: delete the disposable `world`, `world_nether`, and `world_the_end` folders before starting.
 - `--no-build`: skip Gradle build and deploy the existing `build/libs/` jar. Run `./gradlew build -q` first if you need fresh code in the jar.
 - `--prepare-only`: download/provision the dev server and deploy the jar, then exit without starting Paper.
-- `PAPER_VERSION=<version>`: run a different Paper/Minecraft version than `gradle.properties`.
+- `PAPER_VERSION=<version>`: run a different Paper/Minecraft version than `gradle.properties`; versions `1.18.x` through `1.20.x` default to `paper-1.18`, while `1.21.x` defaults to `paper-1.21`.
 - `PAPER_URL=<url>`: use a specific Paper server jar URL instead of the Paper downloads API.
 - `PROTOCOLLIB_URL=<url>`: override the default ProtocolLib download URL.
-- `OREVEIL_TARGET=<target>`: deploy a specific versioned artifact target, defaulting to `paper-1.21`.
+- `OREVEIL_TARGET=<target>`: deploy a specific versioned artifact target instead of inferring it from `PAPER_VERSION`.
+- `SERVER_PORT=<port>`: write a specific dev server port; when omitted, the script starts at `25565` and picks the next available port.
 
 In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joining and moving around. For chunk-packet testing, confirm that chunk rewrite packet/entry counters increase and failures stay at `0`.
 
@@ -244,6 +261,7 @@ In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joinin
 - `src/main/java/com/soymods/oreveil/obfuscation/`: packet rewrite pipeline
 - `src/main/java/com/soymods/oreveil/compat/`: version-neutral compatibility contracts and adapter loading
 - `src/compatModern/java/`: Paper `1.21.x` compatibility adapter included in the `paper-1.21` jar
+- `src/compatCaves/java/`: Paper `1.18.x` compatibility adapter included in the `paper-1.18` jar
 - `src/main/java/com/soymods/oreveil/listener/`: world and player event synchronization
 - `src/main/java/com/soymods/oreveil/ui/`: in-game admin GUI
 - `src/main/resources/`: plugin metadata and configuration
@@ -253,11 +271,11 @@ In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joinin
 | Component | Version |
 |-----------|---------|
 | Plugin Version | `0.1.0-SNAPSHOT` |
-| Target Minecraft Version | `1.21.x` |
+| Target Minecraft Version | `1.18.x`, `1.21.x` |
 | Java | `21+` |
 
 ## Notes
 
-- Oreveil compiles against Paper API `1.21-R0.1-SNAPSHOT` and is intended to run across Paper `1.21.x`.
+- Oreveil builds separate Paper target jars. The `paper-1.21` jar uses Java 21 bytecode and the `paper-1.18` jar uses Java 17 bytecode.
 - ProtocolLib transport is used automatically when available, depending on `transport.mode`.
 - ProtocolLib chunk packet rewriting is best-effort across `1.21.x`; if the server or ProtocolLib exposes an incompatible chunk packet shape, Oreveil disables that rewrite path for the runtime and keeps the sync fallback active.

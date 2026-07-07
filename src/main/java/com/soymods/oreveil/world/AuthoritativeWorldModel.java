@@ -440,7 +440,7 @@ public final class AuthoritativeWorldModel {
                 return rule;
             }
         }
-        return candidates.getLast();
+        return candidates.get(candidates.size() - 1);
     }
 
     private void growSaltVein(

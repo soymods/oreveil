@@ -12,7 +12,7 @@ This gate defines the minimum bar for promoting a build from beta to full releas
 
 ## 2. Manual Smoke Gate (must pass)
 
-Run this on Paper `1.21.x` with ProtocolLib installed. At minimum, smoke test the oldest supported `1.21` runtime and the newest available `1.21.x` runtime for the release.
+Run this on each released target jar with ProtocolLib installed. At minimum, smoke test Paper `1.18.2`, the oldest supported `1.21` runtime, and the newest available `1.21.x` runtime for the release.
 
 Checklist:
 - Start a clean Paper server with Oreveil and ProtocolLib.

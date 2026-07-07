@@ -21,6 +21,12 @@ val compatModern by sourceSets.creating {
     runtimeClasspath += output + compileClasspath
 }
 
+val compatCaves by sourceSets.creating {
+    java.srcDir("src/compatCaves/java")
+}
+
+val paper118CompileOnly by configurations.creating
+
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
@@ -29,6 +35,8 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:${property("paper_api_version")}")
     compileOnly("net.dmulloy2:ProtocolLib:5.4.0")
+    paper118CompileOnly("io.papermc.paper:paper-api:1.18.2-R0.1-SNAPSHOT")
+    paper118CompileOnly("net.dmulloy2:ProtocolLib:5.4.0")
 
     testImplementation(platform("org.junit:junit-bom:5.10.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -41,11 +49,13 @@ tasks.processResources {
     val props = mapOf(
         "version" to project.version,
         "minecraftVersion" to project.property("minecraft_version"),
+        "apiVersion" to "1.21",
+        "compatAdapterClass" to "com.soymods.oreveil.compat.modern.ModernServerCompatibility",
     )
 
     inputs.properties(props)
     filteringCharset = "UTF-8"
-    filesMatching("plugin.yml") {
+    filesMatching(listOf("plugin.yml", "oreveil-compat.properties")) {
         expand(props)
     }
 }
@@ -76,12 +86,56 @@ tasks.jar {
 tasks.named<Jar>("sourcesJar") {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(compatModern.allSource)
+    from(compatCaves.allSource)
+}
+
+val compilePaper118Java by tasks.registering(JavaCompile::class) {
+    description = "Compiles the Paper 1.18 target against the Paper 1.18 API."
+    source(sourceSets.main.get().java, compatCaves.java)
+    classpath = paper118CompileOnly
+    destinationDirectory.set(layout.buildDirectory.dir("classes/java/paper118"))
+    options.encoding = "UTF-8"
+    options.release.set(17)
+}
+
+val processPaper118Resources by tasks.registering(Copy::class) {
+    val props = mapOf(
+        "version" to project.version,
+        "minecraftVersion" to "1.18.2",
+        "apiVersion" to "1.18",
+        "compatAdapterClass" to "com.soymods.oreveil.compat.caves.CavesServerCompatibility",
+    )
+
+    inputs.properties(props)
+    filteringCharset = "UTF-8"
+    from(sourceSets.main.get().resources)
+    into(layout.buildDirectory.dir("resources/paper118"))
+    filesMatching(listOf("plugin.yml", "oreveil-compat.properties")) {
+        expand(props)
+    }
+}
+
+val paper118Jar by tasks.registering(Jar::class) {
+    group = "build"
+    description = "Builds the Paper 1.18 targeted plugin jar."
+    dependsOn(compilePaper118Java, processPaper118Resources)
+    archiveBaseName.set("${project.property("archives_base_name")}-paper-1.18")
+    archiveVersion.set(project.version.toString())
+    from(compilePaper118Java.flatMap { it.destinationDirectory })
+    from(processPaper118Resources)
+    manifest {
+        attributes(
+            "Implementation-Title" to project.name,
+            "Implementation-Version" to project.version,
+            "Oreveil-Compatibility-Adapter" to "caves-1.18",
+        )
+    }
 }
 
 tasks.register("buildAllTargets") {
     group = "build"
     description = "Builds all Oreveil version-targeted plugin jars."
-    dependsOn(tasks.build)
+    dependsOn(tasks.build, paper118Jar)
 }
 
 publishing {

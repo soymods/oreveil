@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { get } from "node:https";
+import { createServer } from "node:net";
 import { basename, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 
@@ -12,8 +13,10 @@ const props = readProperties(join(root, "gradle.properties"));
 const minecraftVersion = process.env.PAPER_VERSION ?? props.minecraft_version ?? "1.21";
 const archivesBaseName = props.archives_base_name ?? "oreveil";
 const pluginVersion = props.plugin_version ?? "0.1.0-SNAPSHOT";
-const targetName = process.env.OREVEIL_TARGET ?? "paper-1.21";
-const serverDir = join(root, "build", "dev-server");
+const targetName = process.env.OREVEIL_TARGET ?? targetForMinecraftVersion(minecraftVersion);
+const buildTask = buildTaskForTarget(targetName);
+let serverPort = process.env.SERVER_PORT ?? "25565";
+const serverDir = join(root, "build", "dev-server", safePathSegment(minecraftVersion));
 const pluginsDir = join(serverDir, "plugins");
 const paperJar = join(serverDir, "paper.jar");
 const protocolLibJar = join(pluginsDir, "ProtocolLib.jar");
@@ -30,6 +33,7 @@ let restarting = false;
 let restartTimer = null;
 let stdinWired = false;
 
+await selectServerPort();
 await prepareServer();
 if (resetWorld) {
   resetWorldFolders();
@@ -54,13 +58,26 @@ async function prepareServer() {
   await writeServerFiles();
 }
 
+async function selectServerPort() {
+  if (process.env.SERVER_PORT) {
+    return;
+  }
+
+  const preferred = Number(serverPort);
+  const available = await firstAvailablePort(preferred, 20);
+  serverPort = String(available);
+  if (available !== preferred) {
+    console.log(`Port ${preferred} is in use; using ${available} for this dev server.`);
+  }
+}
+
 async function buildAndDeploy() {
   if (!noBuild) {
-    await runCommand("./gradlew", ["build", "-q"], root);
+    await runCommand("./gradlew", [buildTask, "-q"], root);
   }
   await mkdir(pluginsDir, { recursive: true });
   await copyFile(pluginJar, deployedPluginJar);
-  console.log(`Deployed ${basename(deployedPluginJar)} to ${pluginsDir}`);
+  console.log(`Deployed ${basename(pluginJar)} as ${basename(deployedPluginJar)} to ${pluginsDir}`);
 }
 
 async function ensurePaper() {
@@ -97,7 +114,7 @@ async function ensureProtocolLib() {
 async function writeServerFiles() {
   await writeFile(join(serverDir, "eula.txt"), "eula=true\n");
   await writeFile(join(serverDir, "server.properties"), [
-    "server-port=25565",
+    `server-port=${serverPort}`,
     "motd=Oreveil dev server",
     "online-mode=false",
     "white-list=false",
@@ -125,7 +142,7 @@ async function writeServerFiles() {
 }
 
 function startServer() {
-  console.log(`Starting Paper dev server. Join localhost:25565 from Minecraft ${minecraftVersion}.`);
+  console.log(`Starting Paper ${minecraftVersion} dev server with Oreveil target ${targetName}. Join localhost:${serverPort}.`);
   serverProcess = spawn("java", ["-Xms1G", "-Xmx2G", "-jar", "paper.jar", "nogui"], {
     cwd: serverDir,
     stdio: ["pipe", "inherit", "inherit"],
@@ -245,6 +262,55 @@ function readProperties(path) {
     }
   }
   return result;
+}
+
+function targetForMinecraftVersion(version) {
+  const match = /^(\d+)\.(\d+)/.exec(version);
+  if (!match) {
+    return "paper-1.21";
+  }
+
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  if (major === 1 && minor >= 18 && minor < 21) {
+    return "paper-1.18";
+  }
+  return "paper-1.21";
+}
+
+function buildTaskForTarget(target) {
+  if (target === "paper-1.18") {
+    return "paper118Jar";
+  }
+  if (target === "paper-1.21") {
+    return "jar";
+  }
+  return "buildAllTargets";
+}
+
+function safePathSegment(value) {
+  return value.replace(/[^A-Za-z0-9._-]/g, "_");
+}
+
+async function firstAvailablePort(start, attempts) {
+  for (let offset = 0; offset < attempts; offset++) {
+    const port = start + offset;
+    if (await isPortAvailable(port)) {
+      return port;
+    }
+  }
+  throw new Error(`No available port found from ${start} to ${start + attempts - 1}. Set SERVER_PORT to choose one explicitly.`);
+}
+
+function isPortAvailable(port) {
+  return new Promise((resolvePort) => {
+    const server = createServer();
+    server.once("error", () => resolvePort(false));
+    server.once("listening", () => {
+      server.close(() => resolvePort(true));
+    });
+    server.listen(port, "0.0.0.0");
+  });
 }
 
 function fetchJson(url) {

@@ -53,6 +53,8 @@ public final class OreveilAdminGui implements Listener {
     private static final int MATERIAL_PAGE_SIZE = 45;
     private static final int[] ORE_SLOTS = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32};
     private static final List<Material> HOST_CHOICES = List.of(Material.STONE, Material.DEEPSLATE, Material.NETHERRACK, Material.END_STONE);
+    private static final Material SALTED_DISTRIBUTION_ICON = materialOr("ECHO_SHARD", Material.NETHER_STAR);
+    private static final Enchantment ACTIVE_ITEM_ENCHANTMENT = enchantmentOr("UNBREAKING", "DURABILITY");
 
     private final OreveilPlugin plugin;
     private final ServerCompatibility compatibility;
@@ -257,7 +259,7 @@ public final class OreveilAdminGui implements Listener {
         inventory.setItem(10, toggle(Material.LEVER, "Obfuscation", config.obfuscationEnabled(), "Master runtime obfuscation switch."));
         inventory.setItem(11, toggle(Material.REDSTONE_TORCH, "Reveal On Exposure", config.revealOnExposure(), "Show protected ores after normal gameplay exposes them."));
         inventory.setItem(12, toggle(Material.GLASS, "Non-Occluding Reveal", config.revealNextToNonOccludingBlocks(), "Treat non-occluding neighbors as exposure sources."));
-        inventory.setItem(14, toggle(Material.ECHO_SHARD, "Salted Distribution", config.saltedDistributionEnabled(), "Use server-private fake ore signals."));
+        inventory.setItem(14, toggle(SALTED_DISTRIBUTION_ICON, "Salted Distribution", config.saltedDistributionEnabled(), "Use server-private fake ore signals."));
         inventory.setItem(15, toggle(Material.GRASS_BLOCK, "Managed World Generation", config.worldGeneration().enabled(), "Enable Oreveil managed-world features."));
         inventory.setItem(16, item(Material.COMPARATOR, "Transport", TITLE,
             "Current: " + TransportMode.fromConfig(config.transportMode()).name(),
@@ -763,8 +765,8 @@ public final class OreveilAdminGui implements Listener {
             lines.add(Component.text(line, NamedTextColor.GRAY));
         }
         meta.lore(lines);
-        if (active) {
-            meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+        if (active && ACTIVE_ITEM_ENCHANTMENT != null) {
+            meta.addEnchant(ACTIVE_ITEM_ENCHANTMENT, 1, true);
             meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
         }
         stack.setItemMeta(meta);
@@ -794,12 +796,22 @@ public final class OreveilAdminGui implements Listener {
         } catch (MalformedURLException | IllegalArgumentException exception) {
             return item(icon.fallback(), name, color, active, lore);
         }
-        if (active) {
-            meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+        if (active && ACTIVE_ITEM_ENCHANTMENT != null) {
+            meta.addEnchant(ACTIVE_ITEM_ENCHANTMENT, 1, true);
             meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
         }
         stack.setItemMeta(meta);
         return stack;
+    }
+
+    private static Material materialOr(String preferred, Material fallback) {
+        Material material = Material.matchMaterial(preferred);
+        return material == null ? fallback : material;
+    }
+
+    private static Enchantment enchantmentOr(String preferred, String fallback) {
+        Enchantment enchantment = Enchantment.getByName(preferred);
+        return enchantment == null ? Enchantment.getByName(fallback) : enchantment;
     }
 
     private void fill(Inventory inventory, int size) {
