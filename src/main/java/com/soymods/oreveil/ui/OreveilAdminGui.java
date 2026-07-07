@@ -10,7 +10,11 @@ import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import com.soymods.oreveil.world.OreveilWorldGenerationService.WorldRegenerationResult;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
@@ -18,10 +22,14 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.World;
+import org.bukkit.block.Block;
+import org.bukkit.block.Sign;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
@@ -37,10 +45,12 @@ public final class OreveilAdminGui implements Listener {
     private static final TextColor WORLD = TextColor.color(0xE56B6F);
     private static final TextColor MUTED = TextColor.color(0x9A9A9A);
     private static final TextColor ERROR = TextColor.color(0xFF6B6B);
+    private static final int MATERIAL_PAGE_SIZE = 45;
     private static final int[] ORE_SLOTS = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32};
     private static final List<Material> HOST_CHOICES = List.of(Material.STONE, Material.DEEPSLATE, Material.NETHERRACK, Material.END_STONE);
 
     private final OreveilPlugin plugin;
+    private final Map<UUID, PendingSignInput> signInputs = new HashMap<>();
 
     public OreveilAdminGui(OreveilPlugin plugin) {
         this.plugin = plugin;
@@ -51,10 +61,18 @@ public final class OreveilAdminGui implements Listener {
     }
 
     private void open(Player player, Screen screen) {
-        OreveilGuiHolder holder = new OreveilGuiHolder(screen);
+        open(player, screen, 0);
+    }
+
+    private void open(Player player, Screen screen, int page) {
+        open(player, screen, page, null);
+    }
+
+    private void open(Player player, Screen screen, int page, Material target) {
+        OreveilGuiHolder holder = new OreveilGuiHolder(screen, Math.max(0, page), target);
         Inventory inventory = Bukkit.createInventory(holder, screen.size(), Component.text(screen.title(), TITLE));
         holder.setInventory(inventory);
-        draw(inventory, screen);
+        draw(inventory, screen, holder.page(), holder.target());
         player.openInventory(inventory);
     }
 
@@ -69,7 +87,7 @@ public final class OreveilAdminGui implements Listener {
             return;
         }
 
-        handleClick(player, holder.screen(), event.getRawSlot());
+        handleClick(player, holder.screen(), holder.page(), holder.target(), event.getRawSlot());
     }
 
     @EventHandler
@@ -79,16 +97,34 @@ public final class OreveilAdminGui implements Listener {
         }
     }
 
-    private void draw(Inventory inventory, Screen screen) {
+    @EventHandler
+    public void onSignChange(SignChangeEvent event) {
+        PendingSignInput input = signInputs.get(event.getPlayer().getUniqueId());
+        if (input == null || !input.matches(event.getBlock())) {
+            return;
+        }
+
+        event.setCancelled(true);
+        signInputs.remove(event.getPlayer().getUniqueId());
+        restoreSignInput(input);
+        applySignInput(event.getPlayer(), input, event.getLine(0));
+    }
+
+    private void draw(Inventory inventory, Screen screen, int page, Material target) {
         inventory.clear();
         fill(inventory, screen.size());
         switch (screen) {
             case MAIN -> drawMain(inventory);
             case ORES -> drawOres(inventory);
+            case EXPOSURE -> drawExposure(inventory);
+            case EXPOSURE_ADJACENT -> drawExposureMaterials(inventory, ExposureKind.ADJACENT, page);
+            case EXPOSURE_TRANSPARENT -> drawExposureMaterials(inventory, ExposureKind.TRANSPARENT, page);
             case RUNTIME -> drawRuntime(inventory);
             case PROFILE -> drawProfiles(inventory);
             case SYNC -> drawSync(inventory);
             case HOSTS -> drawHosts(inventory);
+            case ORE_OVERRIDES -> drawOreOverrides(inventory);
+            case HOST_OVERRIDE_PICK -> drawHostOverridePick(inventory, target);
             case DIAGNOSTICS -> drawDiagnostics(inventory);
             case WORLD -> drawWorld(inventory);
             case CONFIRM_CREATE -> drawConfirm(inventory, GuiAction.CREATE_WORLD);
@@ -117,21 +153,29 @@ public final class OreveilAdminGui implements Listener {
             "Live radius: " + config.liveSyncRadiusBlocks(),
             "Prime radius: " + config.initialSyncChunkRadius()
         ));
-        inventory.setItem(14, item(Material.STONE, "Host Blocks", WORLD,
+        inventory.setItem(14, item(Material.WATER_BUCKET, "Exposure Rules", CONTROLS,
+            "Adjacent: " + config.revealAdjacentMaterials().size() + " materials",
+            "Transparent: " + config.revealTransparentMaterials().size() + " materials"
+        ));
+        inventory.setItem(15, item(Material.STONE, "Host Blocks", WORLD,
             "Overworld: " + config.resolveDimensionDefault(World.Environment.NORMAL).name(),
             "Nether: " + config.resolveDimensionDefault(World.Environment.NETHER).name(),
             "End: " + config.resolveDimensionDefault(World.Environment.THE_END).name()
         ));
-        inventory.setItem(15, item(Material.SPYGLASS, "Diagnostics", TITLE,
+        inventory.setItem(16, item(Material.ANVIL, "Ore Overrides", WORLD,
+            config.oreOverridesView().size() + " configured",
+            "Choose per-ore host block overrides."
+        ));
+        inventory.setItem(21, item(Material.SPYGLASS, "Diagnostics", TITLE,
             "Packet rewrite counters",
             "Cache and fake-ore index status"
         ));
-        inventory.setItem(16, item(Material.MAP, "Managed World", WORLD,
-            "Target: " + config.worldGeneration().targetWorldName(),
-            "Generation: " + onOff(config.worldGeneration().enabled())
-        ));
         inventory.setItem(22, item(Material.CHEST, "Reload Config", TITLE,
             "Reload Oreveil config and runtime state."
+        ));
+        inventory.setItem(23, item(Material.MAP, "Managed World", WORLD,
+            "Target: " + config.worldGeneration().targetWorldName(),
+            "Generation: " + onOff(config.worldGeneration().enabled())
         ));
     }
 
@@ -150,6 +194,55 @@ public final class OreveilAdminGui implements Listener {
             ));
         }
         back(inventory, 49);
+    }
+
+    private void drawExposure(Inventory inventory) {
+        OreveilConfig config = plugin.oreveilConfig();
+        inventory.setItem(11, item(Material.WATER_BUCKET, "Adjacent Materials", CONTROLS,
+            config.revealAdjacentMaterials().size() + " materials reveal protected ores",
+            "when touching a protected ore.",
+            "Click to edit this list."
+        ));
+        inventory.setItem(15, item(Material.GLASS, "Transparent Materials", CONTROLS,
+            config.revealTransparentMaterials().size() + " materials reveal protected ores",
+            "through transparency rules.",
+            "Click to edit this list."
+        ));
+        back(inventory, 22);
+    }
+
+    private void drawExposureMaterials(Inventory inventory, ExposureKind kind, int page) {
+        List<Material> materials = exposureMaterials(kind);
+        int start = page * MATERIAL_PAGE_SIZE;
+        for (int slot = 0; slot < MATERIAL_PAGE_SIZE; slot++) {
+            int index = start + slot;
+            if (index >= materials.size()) {
+                break;
+            }
+
+            Material material = materials.get(index);
+            boolean selected = exposureSelected(kind, material);
+            inventory.setItem(slot, item(
+                iconForMaterial(material),
+                displayMaterial(material),
+                selected ? CONTROLS : MUTED,
+                selected,
+                "Status: " + (selected ? "reveals ore" : "ignored"),
+                "Click to toggle this material."
+            ));
+        }
+
+        back(inventory, 45);
+        if (page > 0) {
+            inventory.setItem(48, item(Material.ARROW, "Previous Page", TITLE, "Page " + page + "."));
+        }
+        inventory.setItem(49, item(Material.BOOK, kind.displayName(), CONTROLS,
+            "Page " + (page + 1) + " of " + Math.max(1, (int) Math.ceil(materials.size() / (double) MATERIAL_PAGE_SIZE)),
+            materials.size() + " block materials available."
+        ));
+        if (start + MATERIAL_PAGE_SIZE < materials.size()) {
+            inventory.setItem(50, item(Material.ARROW, "Next Page", TITLE, "Page " + (page + 2) + "."));
+        }
     }
 
     private void drawRuntime(Inventory inventory) {
@@ -201,9 +294,58 @@ public final class OreveilAdminGui implements Listener {
         host(inventory, 16, World.Environment.THE_END, Material.END_STONE, config.resolveDimensionDefault(World.Environment.THE_END));
         inventory.setItem(22, item(Material.ANVIL, "Ore Overrides", MUTED,
             config.oreOverridesView().size() + " configured",
-            "Use /oreveil host for precise per-ore overrides."
+            "Click to edit per-ore host blocks."
         ));
         back(inventory, 31);
+    }
+
+    private void drawOreOverrides(Inventory inventory) {
+        OreveilConfig config = plugin.oreveilConfig();
+        List<Material> ores = plugin.candidateOreMaterials();
+        for (int index = 0; index < Math.min(ores.size(), ORE_SLOTS.length); index++) {
+            Material ore = ores.get(index);
+            Material override = config.resolveOreOverride(ore);
+            Material current = override != null ? override : config.resolveDimensionDefault(defaultEnvironmentForOre(ore));
+            inventory.setItem(ORE_SLOTS[index], item(
+                ore,
+                displayMaterial(ore),
+                override != null ? WORLD : MUTED,
+                override != null,
+                "Host: " + current.name(),
+                "Mode: " + (override != null ? "ore override" : "dimension default"),
+                "Click to edit."
+            ));
+        }
+        back(inventory, 49);
+    }
+
+    private void drawHostOverridePick(Inventory inventory, Material ore) {
+        if (ore == null) {
+            inventory.setItem(13, item(Material.BARRIER, "No Ore Selected", ERROR, "Return and choose an ore first."));
+            back(inventory, 22);
+            return;
+        }
+
+        OreveilConfig config = plugin.oreveilConfig();
+        Material override = config.resolveOreOverride(ore);
+        Material inherited = config.resolveDimensionDefault(defaultEnvironmentForOre(ore));
+        inventory.setItem(4, item(ore, displayMaterial(ore), WORLD,
+            "Override: " + (override == null ? "none" : override.name()),
+            "Default host: " + inherited.name()
+        ));
+
+        int[] slots = {10, 11, 12, 13};
+        for (int i = 0; i < HOST_CHOICES.size(); i++) {
+            Material host = HOST_CHOICES.get(i);
+            boolean selected = host == override;
+            inventory.setItem(slots[i], item(host, displayMaterial(host), selected ? WORLD : MUTED, selected,
+                selected ? "Currently selected." : "Click to use this host block."
+            ));
+        }
+        inventory.setItem(15, item(Material.BARRIER, "Clear Override", ERROR,
+            "Use the dimension default instead."
+        ));
+        back(inventory, 22);
     }
 
     private void drawDiagnostics(Inventory inventory) {
@@ -277,14 +419,19 @@ public final class OreveilAdminGui implements Listener {
         inventory.setItem(22, item(Material.BARRIER, "Cancel", ERROR, "Return to managed-world controls."));
     }
 
-    private void handleClick(Player player, Screen screen, int slot) {
+    private void handleClick(Player player, Screen screen, int page, Material target, int slot) {
         switch (screen) {
             case MAIN -> handleMain(player, slot);
             case ORES -> handleOres(player, slot);
+            case EXPOSURE -> handleExposure(player, slot);
+            case EXPOSURE_ADJACENT -> handleExposureMaterials(player, ExposureKind.ADJACENT, page, slot);
+            case EXPOSURE_TRANSPARENT -> handleExposureMaterials(player, ExposureKind.TRANSPARENT, page, slot);
             case RUNTIME -> handleRuntime(player, slot);
             case PROFILE -> handleProfiles(player, slot);
             case SYNC -> handleSync(player, slot);
             case HOSTS -> handleHosts(player, slot);
+            case ORE_OVERRIDES -> handleOreOverrides(player, slot);
+            case HOST_OVERRIDE_PICK -> handleHostOverridePick(player, target, slot);
             case DIAGNOSTICS -> {
                 if (slot == 22) {
                     open(player, Screen.DIAGNOSTICS);
@@ -306,17 +453,59 @@ public final class OreveilAdminGui implements Listener {
             case 11 -> open(player, Screen.ORES);
             case 12 -> open(player, Screen.PROFILE);
             case 13 -> open(player, Screen.SYNC);
-            case 14 -> open(player, Screen.HOSTS);
-            case 15 -> open(player, Screen.DIAGNOSTICS);
-            case 16 -> open(player, Screen.WORLD);
+            case 14 -> open(player, Screen.EXPOSURE);
+            case 15 -> open(player, Screen.HOSTS);
+            case 16 -> open(player, Screen.ORE_OVERRIDES);
+            case 21 -> open(player, Screen.DIAGNOSTICS);
             case 22 -> {
                 plugin.reloadOreveilConfig();
                 feedback(player, "Oreveil config reloaded.");
                 open(player, Screen.MAIN);
             }
+            case 23 -> open(player, Screen.WORLD);
             default -> {
             }
         }
+    }
+
+    private void handleExposure(Player player, int slot) {
+        switch (slot) {
+            case 11 -> open(player, Screen.EXPOSURE_ADJACENT);
+            case 15 -> open(player, Screen.EXPOSURE_TRANSPARENT);
+            case 22 -> open(player, Screen.MAIN);
+            default -> {
+            }
+        }
+    }
+
+    private void handleExposureMaterials(Player player, ExposureKind kind, int page, int slot) {
+        if (slot == 45) {
+            open(player, Screen.EXPOSURE);
+            return;
+        }
+        if (slot == 48 && page > 0) {
+            open(player, kind.screen(), page - 1);
+            return;
+        }
+
+        List<Material> materials = exposureMaterials(kind);
+        if (slot == 50 && (page + 1) * MATERIAL_PAGE_SIZE < materials.size()) {
+            open(player, kind.screen(), page + 1);
+            return;
+        }
+        if (slot < 0 || slot >= MATERIAL_PAGE_SIZE) {
+            return;
+        }
+
+        int index = page * MATERIAL_PAGE_SIZE + slot;
+        if (index >= materials.size()) {
+            return;
+        }
+
+        Material material = materials.get(index);
+        plugin.toggleMaterialListEntry(kind.path(), material);
+        feedback(player, displayMaterial(material) + " toggled.");
+        open(player, kind.screen(), page);
     }
 
     private void handleOres(Player player, int slot) {
@@ -370,10 +559,31 @@ public final class OreveilAdminGui implements Listener {
     private void handleSync(Player player, int slot) {
         switch (slot) {
             case 10 -> adjustInteger("obfuscation.live-sync-radius-blocks", plugin.oreveilConfig().liveSyncRadiusBlocks(), -16, 16, 256);
+            case 11 -> openSignInput(player, new PendingSignInput(
+                "obfuscation.live-sync-radius-blocks",
+                "Live Sync Radius",
+                plugin.oreveilConfig().liveSyncRadiusBlocks(),
+                16,
+                256
+            ));
             case 12 -> adjustInteger("obfuscation.live-sync-radius-blocks", plugin.oreveilConfig().liveSyncRadiusBlocks(), 16, 16, 256);
             case 19 -> adjustInteger("obfuscation.initial-sync-chunk-radius", plugin.oreveilConfig().initialSyncChunkRadius(), -1, 0, 8);
+            case 20 -> openSignInput(player, new PendingSignInput(
+                "obfuscation.initial-sync-chunk-radius",
+                "Chunk Prime Radius",
+                plugin.oreveilConfig().initialSyncChunkRadius(),
+                0,
+                8
+            ));
             case 21 -> adjustInteger("obfuscation.initial-sync-chunk-radius", plugin.oreveilConfig().initialSyncChunkRadius(), 1, 0, 8);
             case 28 -> adjustInteger("obfuscation.reveal-proximity-blocks", plugin.oreveilConfig().revealProximityBlocks(), -8, 0, 96);
+            case 29 -> openSignInput(player, new PendingSignInput(
+                "obfuscation.reveal-proximity-blocks",
+                "Exposed Refresh Radius",
+                plugin.oreveilConfig().revealProximityBlocks(),
+                0,
+                96
+            ));
             case 30 -> adjustInteger("obfuscation.reveal-proximity-blocks", plugin.oreveilConfig().revealProximityBlocks(), 8, 0, 96);
             case 49 -> {
                 open(player, Screen.MAIN);
@@ -382,6 +592,9 @@ public final class OreveilAdminGui implements Listener {
             default -> {
                 return;
             }
+        }
+        if (slot == 11 || slot == 20 || slot == 29) {
+            return;
         }
         feedback(player, "Sync setting updated.");
         open(player, Screen.SYNC);
@@ -392,6 +605,10 @@ public final class OreveilAdminGui implements Listener {
             case 10 -> cycleHost(World.Environment.NORMAL);
             case 13 -> cycleHost(World.Environment.NETHER);
             case 16 -> cycleHost(World.Environment.THE_END);
+            case 22 -> {
+                open(player, Screen.ORE_OVERRIDES);
+                return;
+            }
             case 31 -> {
                 open(player, Screen.MAIN);
                 return;
@@ -402,6 +619,44 @@ public final class OreveilAdminGui implements Listener {
         }
         feedback(player, "Host block updated.");
         open(player, Screen.HOSTS);
+    }
+
+    private void handleOreOverrides(Player player, int slot) {
+        if (slot == 49) {
+            open(player, Screen.MAIN);
+            return;
+        }
+
+        int index = slotIndex(ORE_SLOTS, slot);
+        List<Material> ores = plugin.candidateOreMaterials();
+        if (index >= 0 && index < ores.size()) {
+            open(player, Screen.HOST_OVERRIDE_PICK, 0, ores.get(index));
+        }
+    }
+
+    private void handleHostOverridePick(Player player, Material ore, int slot) {
+        if (slot == 22) {
+            open(player, Screen.ORE_OVERRIDES);
+            return;
+        }
+        if (ore == null) {
+            return;
+        }
+
+        int[] slots = {10, 11, 12, 13};
+        int index = slotIndex(slots, slot);
+        if (index >= 0 && index < HOST_CHOICES.size()) {
+            Material host = HOST_CHOICES.get(index);
+            plugin.setConfigMapEntry("host-blocks.ore-overrides", ore.name(), host.name());
+            feedback(player, displayMaterial(ore) + " host set to " + host.name() + ".");
+            open(player, Screen.ORE_OVERRIDES);
+            return;
+        }
+        if (slot == 15) {
+            plugin.clearConfigMapEntry("host-blocks.ore-overrides", ore.name());
+            feedback(player, displayMaterial(ore) + " override cleared.");
+            open(player, Screen.ORE_OVERRIDES);
+        }
     }
 
     private void handleWorld(Player player, int slot) {
@@ -467,7 +722,7 @@ public final class OreveilAdminGui implements Listener {
 
     private void numericRow(Inventory inventory, int startSlot, String title, Material icon, int value, int step) {
         inventory.setItem(startSlot, item(Material.RED_STAINED_GLASS_PANE, "-" + step, ERROR, "Lower " + title + "."));
-        inventory.setItem(startSlot + 1, item(icon, title, CONTROLS, "Current: " + value));
+        inventory.setItem(startSlot + 1, item(icon, title, CONTROLS, "Current: " + value, "Click for exact sign input."));
         inventory.setItem(startSlot + 2, item(Material.LIME_STAINED_GLASS_PANE, "+" + step, ORES, "Raise " + title + "."));
     }
 
@@ -538,6 +793,97 @@ public final class OreveilAdminGui implements Listener {
         plugin.setConfigMapEntry("host-blocks.dimension-defaults", environment.name(), next.name());
     }
 
+    private void openSignInput(Player player, PendingSignInput input) {
+        PendingSignInput previous = signInputs.remove(player.getUniqueId());
+        if (previous != null) {
+            restoreSignInput(previous);
+        }
+
+        Block block = findSignInputBlock(player);
+        if (block == null) {
+            feedback(player, "No safe air block nearby for sign input.");
+            open(player, Screen.SYNC);
+            return;
+        }
+
+        input.attach(block, block.getBlockData());
+        block.setType(Material.OAK_SIGN, false);
+        if (!(block.getState() instanceof Sign sign)) {
+            restoreSignInput(input);
+            feedback(player, "Could not open sign input.");
+            open(player, Screen.SYNC);
+            return;
+        }
+
+        sign.setEditable(true);
+        sign.setAllowedEditorUniqueId(player.getUniqueId());
+        sign.setLine(0, String.valueOf(input.current()));
+        sign.setLine(1, input.title());
+        sign.setLine(2, "Min " + input.min() + " Max " + input.max());
+        sign.setLine(3, "Edit line 1");
+        sign.update(true, false);
+
+        signInputs.put(player.getUniqueId(), input);
+        player.closeInventory();
+        player.openSign(sign);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            PendingSignInput pending = signInputs.get(player.getUniqueId());
+            if (pending == input) {
+                signInputs.remove(player.getUniqueId());
+                restoreSignInput(input);
+            }
+        }, 600L);
+    }
+
+    private Block findSignInputBlock(Player player) {
+        Block origin = player.getLocation().getBlock();
+        int[][] offsets = {
+            {0, 2, 0},
+            {0, 3, 0},
+            {1, 2, 0},
+            {-1, 2, 0},
+            {0, 2, 1},
+            {0, 2, -1}
+        };
+        for (int[] offset : offsets) {
+            Block candidate = origin.getRelative(offset[0], offset[1], offset[2]);
+            if (candidate.isEmpty()) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private void applySignInput(Player player, PendingSignInput input, String raw) {
+        String value = raw == null || raw.isBlank() ? String.valueOf(input.current()) : raw.trim();
+        int parsed;
+        try {
+            parsed = Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            feedback(player, input.title() + " needs a whole number.");
+            open(player, Screen.SYNC);
+            return;
+        }
+
+        int clamped = Math.max(input.min(), Math.min(input.max(), parsed));
+        plugin.setIntegerSetting(input.path(), clamped);
+        feedback(player, input.title() + " set to " + clamped + ".");
+        open(player, Screen.SYNC);
+    }
+
+    private void restoreSignInput(PendingSignInput input) {
+        if (input.block() != null && input.originalData() != null) {
+            input.block().setBlockData(input.originalData(), false);
+        }
+    }
+
+    private World.Environment defaultEnvironmentForOre(Material material) {
+        if (material.name().startsWith("NETHER_") || material == Material.ANCIENT_DEBRIS) {
+            return World.Environment.NETHER;
+        }
+        return World.Environment.NORMAL;
+    }
+
     private void teleportManaged(Player player) {
         String target = plugin.oreveilConfig().worldGeneration().targetWorldName();
         World world = Bukkit.getWorld(target);
@@ -596,6 +942,36 @@ public final class OreveilAdminGui implements Listener {
         };
     }
 
+    private List<Material> exposureMaterials(ExposureKind kind) {
+        return Arrays.stream(Material.values())
+            .filter(Material::isBlock)
+            .sorted(Comparator
+                .comparing((Material material) -> !exposureSelected(kind, material))
+                .thenComparing(Enum::name))
+            .toList();
+    }
+
+    private boolean exposureSelected(ExposureKind kind, Material material) {
+        OreveilConfig config = plugin.oreveilConfig();
+        return switch (kind) {
+            case ADJACENT -> config.revealAdjacentMaterials().contains(material);
+            case TRANSPARENT -> config.revealTransparentMaterials().contains(material);
+        };
+    }
+
+    private Material iconForMaterial(Material material) {
+        if (material == Material.AIR || material == Material.CAVE_AIR || material == Material.VOID_AIR) {
+            return Material.LIGHT_BLUE_STAINED_GLASS_PANE;
+        }
+        if (material == Material.WATER) {
+            return Material.WATER_BUCKET;
+        }
+        if (material == Material.LAVA) {
+            return Material.LAVA_BUCKET;
+        }
+        return material.isItem() ? material : Material.STONE;
+    }
+
     private String displayEnvironment(World.Environment environment) {
         return switch (environment) {
             case NORMAL -> "Overworld Host";
@@ -630,10 +1006,15 @@ public final class OreveilAdminGui implements Listener {
     private enum Screen {
         MAIN(27, "Oreveil"),
         ORES(54, "Oreveil - Protected Ores"),
+        EXPOSURE(27, "Oreveil - Exposure"),
+        EXPOSURE_ADJACENT(54, "Oreveil - Adjacent"),
+        EXPOSURE_TRANSPARENT(54, "Oreveil - Transparent"),
         RUNTIME(27, "Oreveil - Runtime"),
         PROFILE(27, "Oreveil - Xray Profile"),
         SYNC(54, "Oreveil - Sync"),
         HOSTS(36, "Oreveil - Host Blocks"),
+        ORE_OVERRIDES(54, "Oreveil - Ore Overrides"),
+        HOST_OVERRIDE_PICK(27, "Oreveil - Host Override"),
         DIAGNOSTICS(27, "Oreveil - Diagnostics"),
         WORLD(27, "Oreveil - Managed World"),
         CONFIRM_CREATE(27, "Oreveil - Confirm Create"),
@@ -655,6 +1036,33 @@ public final class OreveilAdminGui implements Listener {
 
         String title() {
             return title;
+        }
+    }
+
+    private enum ExposureKind {
+        ADJACENT("Adjacent Materials", "exposure.reveal-adjacent-materials", Screen.EXPOSURE_ADJACENT),
+        TRANSPARENT("Transparent Materials", "exposure.reveal-transparent-materials", Screen.EXPOSURE_TRANSPARENT);
+
+        private final String displayName;
+        private final String path;
+        private final Screen screen;
+
+        ExposureKind(String displayName, String path, Screen screen) {
+            this.displayName = displayName;
+            this.path = path;
+            this.screen = screen;
+        }
+
+        String displayName() {
+            return displayName;
+        }
+
+        String path() {
+            return path;
+        }
+
+        Screen screen() {
+            return screen;
         }
     }
 
@@ -705,6 +1113,61 @@ public final class OreveilAdminGui implements Listener {
         }
     }
 
+    private static final class PendingSignInput {
+        private final String path;
+        private final String title;
+        private final int current;
+        private final int min;
+        private final int max;
+        private Block block;
+        private BlockData originalData;
+
+        private PendingSignInput(String path, String title, int current, int min, int max) {
+            this.path = path;
+            this.title = title;
+            this.current = current;
+            this.min = min;
+            this.max = max;
+        }
+
+        private void attach(Block block, BlockData originalData) {
+            this.block = block;
+            this.originalData = originalData;
+        }
+
+        private boolean matches(Block block) {
+            return this.block != null && this.block.getWorld().equals(block.getWorld()) && this.block.getLocation().equals(block.getLocation());
+        }
+
+        private String path() {
+            return path;
+        }
+
+        private String title() {
+            return title;
+        }
+
+        private int current() {
+            return current;
+        }
+
+        private int min() {
+            return min;
+        }
+
+        private int max() {
+            return max;
+        }
+
+        private Block block() {
+            return block;
+        }
+
+        private BlockData originalData() {
+            return originalData;
+        }
+    }
+
     private final class OreveilWorldOperationFeedback implements com.soymods.oreveil.world.OreveilWorldGenerationService.WorldOperationListener {
         private final Player player;
 
@@ -732,10 +1195,14 @@ public final class OreveilAdminGui implements Listener {
 
     private static final class OreveilGuiHolder implements InventoryHolder {
         private final Screen screen;
+        private final Material target;
+        private final int page;
         private Inventory inventory;
 
-        private OreveilGuiHolder(Screen screen) {
+        private OreveilGuiHolder(Screen screen, int page, Material target) {
             this.screen = screen;
+            this.page = page;
+            this.target = target;
         }
 
         @Override
@@ -749,6 +1216,14 @@ public final class OreveilAdminGui implements Listener {
 
         private Screen screen() {
             return screen;
+        }
+
+        private int page() {
+            return page;
+        }
+
+        private Material target() {
+            return target;
         }
     }
 }
