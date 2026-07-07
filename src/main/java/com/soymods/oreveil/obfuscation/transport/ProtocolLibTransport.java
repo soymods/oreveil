@@ -158,34 +158,11 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
     }
 
     private void rewriteMultiBlockChange(PacketEvent event) {
-        PacketContainer packet = event.getPacket();
-        if (packet.getMultiBlockChangeInfoArrays().size() <= 0) {
-            return;
-        }
-
         try {
-            MultiBlockChangeInfo[] changes = packet.getMultiBlockChangeInfoArrays().read(0);
-            if (changes == null || changes.length == 0) {
+            if (rewriteModernMultiBlockChange(event)) {
                 return;
             }
-
-            Player player = event.getPlayer();
-            World world = player.getWorld();
-            int rewrittenEntries = 0;
-            for (MultiBlockChangeInfo change : changes) {
-                if (change == null) {
-                    continue;
-                }
-
-                Block block = change.getLocation(world).getBlock();
-                Material visibleMaterial = materialResolver.apply(block, player);
-                if (visibleMaterial != change.getData().getType()) {
-                    change.setData(WrappedBlockData.createData(visibleMaterial));
-                    rewrittenEntries++;
-                }
-            }
-            packet.getMultiBlockChangeInfoArrays().write(0, changes);
-            metrics.recordMultiBlockPacketRewrite(rewrittenEntries);
+            rewriteLegacyMultiBlockChange(event);
         } catch (RuntimeException exception) {
             metrics.recordMultiBlockRewriteFailure();
             if (!warnedMultiBlockRewriteFailure) {
@@ -193,6 +170,73 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
                 logger.warning("Could not rewrite a multi-block change packet: " + exception.getMessage());
             }
         }
+    }
+
+    private boolean rewriteModernMultiBlockChange(PacketEvent event) {
+        PacketContainer packet = event.getPacket();
+        if (packet.getSectionPositions().size() <= 0
+            || packet.getShortArrays().size() <= 0
+            || packet.getBlockDataArrays().size() <= 0) {
+            return false;
+        }
+
+        BlockPosition sectionPosition = packet.getSectionPositions().read(0);
+        short[] positions = packet.getShortArrays().read(0);
+        WrappedBlockData[] states = packet.getBlockDataArrays().read(0);
+        if (sectionPosition == null || positions == null || states == null || positions.length == 0) {
+            return true;
+        }
+
+        Player player = event.getPlayer();
+        World world = player.getWorld();
+        int rewrittenEntries = 0;
+        int count = Math.min(positions.length, states.length);
+        for (int i = 0; i < count; i++) {
+            int packed = positions[i] & 0xFFFF;
+            int x = (sectionPosition.getX() << 4) + ((packed >> 8) & 0xF);
+            int y = (sectionPosition.getY() << 4) + (packed & 0xF);
+            int z = (sectionPosition.getZ() << 4) + ((packed >> 4) & 0xF);
+            Block block = world.getBlockAt(x, y, z);
+            Material visibleMaterial = materialResolver.apply(block, player);
+            if (states[i] == null || visibleMaterial != states[i].getType()) {
+                states[i] = WrappedBlockData.createData(visibleMaterial);
+                rewrittenEntries++;
+            }
+        }
+
+        packet.getBlockDataArrays().write(0, states);
+        metrics.recordMultiBlockPacketRewrite(rewrittenEntries);
+        return true;
+    }
+
+    private void rewriteLegacyMultiBlockChange(PacketEvent event) {
+        PacketContainer packet = event.getPacket();
+        if (packet.getMultiBlockChangeInfoArrays().size() <= 0) {
+            return;
+        }
+
+        MultiBlockChangeInfo[] changes = packet.getMultiBlockChangeInfoArrays().read(0);
+        if (changes == null || changes.length == 0) {
+            return;
+        }
+
+        Player player = event.getPlayer();
+        World world = player.getWorld();
+        int rewrittenEntries = 0;
+        for (MultiBlockChangeInfo change : changes) {
+            if (change == null) {
+                continue;
+            }
+
+            Block block = change.getLocation(world).getBlock();
+            Material visibleMaterial = materialResolver.apply(block, player);
+            if (visibleMaterial != change.getData().getType()) {
+                change.setData(WrappedBlockData.createData(visibleMaterial));
+                rewrittenEntries++;
+            }
+        }
+        packet.getMultiBlockChangeInfoArrays().write(0, changes);
+        metrics.recordMultiBlockPacketRewrite(rewrittenEntries);
     }
 
     private void handleChunkPacket(PacketEvent event) {

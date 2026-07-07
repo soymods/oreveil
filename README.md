@@ -177,6 +177,21 @@ Managed world tools:
 - Requires Java `21+`.
 - Integrates with ProtocolLib when installed.
 
+## Release Readiness
+
+Use [`RELEASE_GATE.md`](RELEASE_GATE.md) before promoting a build.
+
+## License
+
+This project is distributed under the custom **Oreveil License (All Rights Reserved)** in [`LICENSE.txt`](LICENSE.txt).
+
+In short:
+
+- Redistribution, modification, or re-uploading is not allowed without explicit written permission.
+- Videos featuring the plugin are allowed, including monetized videos.
+- Modpack and server-pack inclusion is allowed under the limits described in the license.
+- The plugin is provided as-is without warranty.
+
 ## Development
 
 ### Build From Source
