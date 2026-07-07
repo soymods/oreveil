@@ -570,6 +570,10 @@ public final class OreveilAdminGui implements Listener {
     }
 
     private void feedback(Player player, String message) {
+        if (!Bukkit.isPrimaryThread()) {
+            Bukkit.getScheduler().runTask(plugin, () -> feedback(player, message));
+            return;
+        }
         player.sendActionBar(Component.text(message, TITLE));
         player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 0.4F, 1.1F);
     }
