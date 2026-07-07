@@ -1,5 +1,6 @@
 package com.soymods.oreveil.ui;
 
+import com.soymods.oreveil.compat.ServerCompatibility;
 import com.soymods.oreveil.bootstrap.OreveilPlugin;
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.config.OreveilWorldGenerationConfig;
@@ -8,7 +9,6 @@ import com.soymods.oreveil.obfuscation.ObfuscationMetrics;
 import com.soymods.oreveil.obfuscation.transport.TransportMode;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import com.soymods.oreveil.world.OreveilWorldGenerationService.WorldRegenerationResult;
-import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.util.ArrayList;
@@ -55,10 +55,12 @@ public final class OreveilAdminGui implements Listener {
     private static final List<Material> HOST_CHOICES = List.of(Material.STONE, Material.DEEPSLATE, Material.NETHERRACK, Material.END_STONE);
 
     private final OreveilPlugin plugin;
+    private final ServerCompatibility compatibility;
     private final Map<UUID, PendingSignInput> signInputs = new HashMap<>();
 
-    public OreveilAdminGui(OreveilPlugin plugin) {
+    public OreveilAdminGui(OreveilPlugin plugin, ServerCompatibility compatibility) {
         this.plugin = plugin;
+        this.compatibility = compatibility;
     }
 
     public void open(Player player) {
@@ -852,7 +854,7 @@ public final class OreveilAdminGui implements Listener {
         }
 
         sign.setEditable(true);
-        allowSignEditor(sign, player.getUniqueId());
+        compatibility.allowSignEditor(sign, player.getUniqueId());
         sign.setLine(0, String.valueOf(input.current()));
         sign.setLine(1, input.title());
         sign.setLine(2, "Min " + input.min() + " Max " + input.max());
@@ -869,15 +871,6 @@ public final class OreveilAdminGui implements Listener {
                 restoreSignInput(input);
             }
         }, 600L);
-    }
-
-    private static void allowSignEditor(Sign sign, UUID playerId) {
-        try {
-            Method method = sign.getClass().getMethod("setAllowedEditorUniqueId", UUID.class);
-            method.invoke(sign, playerId);
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
-            // Older 1.21 APIs do not expose a per-player sign editor hint.
-        }
     }
 
     private Block findSignInputBlock(Player player) {

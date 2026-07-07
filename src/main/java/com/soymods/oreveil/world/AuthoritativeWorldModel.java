@@ -1,5 +1,6 @@
 package com.soymods.oreveil.world;
 
+import com.soymods.oreveil.compat.ServerCompatibility;
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.config.XrayProfile;
 import com.soymods.oreveil.config.XrayProfile.OreRarity;
@@ -40,6 +41,7 @@ public final class AuthoritativeWorldModel {
 
     private final Logger logger;
     private final Plugin plugin;
+    private final ServerCompatibility compatibility;
     private OreveilConfig config;
 
     // Per-chunk salt state: chunkKey → (packed local block pos → fake ore material)
@@ -98,10 +100,11 @@ public final class AuthoritativeWorldModel {
         new SaltOreRule(Material.ANCIENT_DEBRIS, World.Environment.NETHER, 8, 24, 1, 1, 3)
     );
 
-    public AuthoritativeWorldModel(Plugin plugin, Logger logger, OreveilConfig config) {
+    public AuthoritativeWorldModel(Plugin plugin, Logger logger, OreveilConfig config, ServerCompatibility compatibility) {
         this.plugin = plugin;
         this.logger = logger;
         this.config = config;
+        this.compatibility = compatibility;
     }
 
     public void start() {
@@ -362,8 +365,8 @@ public final class AuthoritativeWorldModel {
 
     private void generateSalt(Chunk chunk, Map<Integer, Material> salt) {
         World world = chunk.getWorld();
-        int minY = world.getMinHeight();
-        int maxY = world.getMaxHeight();
+        int minY = compatibility.minBuildHeight(world);
+        int maxY = compatibility.maxBuildHeight(world);
         World.Environment env = world.getEnvironment();
 
         List<SaltOreRule> candidates = saltOreCandidates(env);
@@ -495,7 +498,7 @@ public final class AuthoritativeWorldModel {
         if (lx < 0 || lx > 15 || lz < 0 || lz > 15 || y < rule.minY() || y > rule.maxY()) {
             return;
         }
-        if (y < world.getMinHeight() || y >= world.getMaxHeight()) {
+        if (y < compatibility.minBuildHeight(world) || y >= compatibility.maxBuildHeight(world)) {
             return;
         }
 
@@ -588,8 +591,8 @@ public final class AuthoritativeWorldModel {
 
     private ChunkOreScan scanProtectedOres(Chunk chunk) {
         World world = chunk.getWorld();
-        int minY = world.getMinHeight();
-        int maxY = world.getMaxHeight();
+        int minY = compatibility.minBuildHeight(world);
+        int maxY = compatibility.maxBuildHeight(world);
         int baseX = chunk.getX() << 4;
         int baseZ = chunk.getZ() << 4;
         Map<Integer, Material> ores = new HashMap<>();
@@ -645,7 +648,7 @@ public final class AuthoritativeWorldModel {
         int x = block.getX() + face.getModX();
         int y = block.getY() + face.getModY();
         int z = block.getZ() + face.getModZ();
-        if (y < world.getMinHeight() || y >= world.getMaxHeight()) {
+        if (y < compatibility.minBuildHeight(world) || y >= compatibility.maxBuildHeight(world)) {
             return Material.AIR;
         }
         if (!world.isChunkLoaded(x >> 4, z >> 4)) {

@@ -1,5 +1,6 @@
 package com.soymods.oreveil.world;
 
+import com.soymods.oreveil.compat.ServerCompatibility;
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.config.OreveilWorldGenerationConfig;
 import java.io.File;
@@ -41,16 +42,18 @@ public final class OreveilWorldGenerationService {
 
     private final Plugin plugin;
     private final Logger logger;
+    private final ServerCompatibility compatibility;
     private final Queue<QueuedChunk> queuedChunks = new ArrayDeque<>();
     private final Set<QueuedChunk> queuedChunkSet = new HashSet<>();
     private OreveilConfig config;
     private BukkitTask queueTask;
     private Consumer<List<Block>> mutationSync;
 
-    public OreveilWorldGenerationService(Plugin plugin, Logger logger, OreveilConfig config) {
+    public OreveilWorldGenerationService(Plugin plugin, Logger logger, OreveilConfig config, ServerCompatibility compatibility) {
         this.plugin = plugin;
         this.logger = logger;
         this.config = config;
+        this.compatibility = compatibility;
     }
 
     public void reload(OreveilConfig config) {
@@ -418,8 +421,8 @@ public final class OreveilWorldGenerationService {
     private void mutateOreDistribution(Chunk chunk, OreveilWorldGenerationConfig settings, List<Block> changedBlocks) {
         Random random = seededRandom(chunk, "ore-remix");
         World world = chunk.getWorld();
-        int minY = world.getMinHeight();
-        int maxY = world.getMaxHeight();
+        int minY = compatibility.minBuildHeight(world);
+        int maxY = compatibility.maxBuildHeight(world);
         int baseX = chunk.getX() << 4;
         int baseZ = chunk.getZ() << 4;
 
@@ -565,8 +568,8 @@ public final class OreveilWorldGenerationService {
     private void seedExposedOre(Chunk chunk, OreveilWorldGenerationConfig settings, List<Block> changedBlocks) {
         Random random = seededRandom(chunk, "exposed-ore");
         World world = chunk.getWorld();
-        int minY = world.getMinHeight();
-        int maxY = world.getMaxHeight();
+        int minY = compatibility.minBuildHeight(world);
+        int maxY = compatibility.maxBuildHeight(world);
         int baseX = chunk.getX() << 4;
         int baseZ = chunk.getZ() << 4;
 

@@ -1,5 +1,6 @@
 package com.soymods.oreveil.obfuscation.transport;
 
+import com.soymods.oreveil.compat.ServerCompatibility;
 import com.comphenix.protocol.PacketType;
 import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.ProtocolManager;
@@ -34,6 +35,7 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
     private final Logger logger;
     private final AuthoritativeWorldModel worldModel;
     private final ObfuscationMetrics metrics;
+    private final ServerCompatibility compatibility;
     private final ChunkPacketBlockRewriter chunkRewriter;
     private ProtocolManager protocolManager;
     private OreveilConfig config;
@@ -47,13 +49,15 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
         Plugin plugin,
         Logger logger,
         AuthoritativeWorldModel worldModel,
-        ObfuscationMetrics metrics
+        ObfuscationMetrics metrics,
+        ServerCompatibility compatibility
     ) {
         this.plugin = plugin;
-        this.fallback = new BlockUpdateSyncTransport(plugin, logger, metrics);
+        this.fallback = new BlockUpdateSyncTransport(plugin, logger, metrics, compatibility);
         this.logger = logger;
         this.worldModel = worldModel;
         this.metrics = metrics;
+        this.compatibility = compatibility;
         this.chunkRewriter = new ChunkPacketBlockRewriter(worldModel);
     }
 
@@ -274,8 +278,8 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
                 world.getEnvironment(),
                 chunkX,
                 chunkZ,
-                world.getMinHeight(),
-                world.getMaxHeight(),
+                compatibility.minBuildHeight(world),
+                compatibility.maxBuildHeight(world),
                 config
             );
 

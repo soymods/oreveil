@@ -1,6 +1,8 @@
 package com.soymods.oreveil.bootstrap;
 
 import com.soymods.oreveil.command.OreveilCommand;
+import com.soymods.oreveil.compat.ServerCompatibility;
+import com.soymods.oreveil.compat.ServerCompatibilityFactory;
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.config.OreveilConfigLoader;
 import com.soymods.oreveil.exposure.ExposureService;
@@ -60,6 +62,7 @@ public final class OreveilPlugin extends JavaPlugin {
     private NetworkObfuscationService obfuscationService;
     private OreveilWorldGenerationService worldGenerationService;
     private OreveilAdminGui adminGui;
+    private ServerCompatibility compatibility;
 
     @Override
     public void onEnable() {
@@ -67,11 +70,12 @@ public final class OreveilPlugin extends JavaPlugin {
 
         this.configLoader = new OreveilConfigLoader(getLogger());
         this.oreveilConfig = configLoader.load(getConfig());
-        this.worldModel = new AuthoritativeWorldModel(this, getLogger(), oreveilConfig);
+        this.compatibility = ServerCompatibilityFactory.detect(getLogger());
+        this.worldModel = new AuthoritativeWorldModel(this, getLogger(), oreveilConfig, compatibility);
         this.exposureService = new ExposureService(getLogger(), oreveilConfig);
-        this.obfuscationService = new NetworkObfuscationService(this, getLogger(), oreveilConfig, worldModel, exposureService);
-        this.worldGenerationService = new OreveilWorldGenerationService(this, getLogger(), oreveilConfig);
-        this.adminGui = new OreveilAdminGui(this);
+        this.obfuscationService = new NetworkObfuscationService(this, getLogger(), oreveilConfig, worldModel, exposureService, compatibility);
+        this.worldGenerationService = new OreveilWorldGenerationService(this, getLogger(), oreveilConfig, compatibility);
+        this.adminGui = new OreveilAdminGui(this, compatibility);
         this.worldGenerationService.setMutationSync(blocks -> {
             blocks.forEach(worldModel::refreshBlock);
             obfuscationService.resyncBlocks(blocks);

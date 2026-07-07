@@ -1,9 +1,9 @@
 package com.soymods.oreveil.obfuscation;
 
+import com.soymods.oreveil.compat.ServerCompatibility;
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.exposure.ExposureService;
 import com.soymods.oreveil.obfuscation.transport.ObfuscationTransport;
-import com.soymods.oreveil.obfuscation.transport.TransportFactory;
 import com.soymods.oreveil.util.BlockNeighborhoods;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import java.util.Collection;
@@ -28,22 +28,25 @@ public final class NetworkObfuscationService {
     private final ObfuscationMetrics metrics;
     private ObfuscationTransport transport;
     private final Plugin plugin;
+    private final ServerCompatibility compatibility;
 
     public NetworkObfuscationService(
         Plugin plugin,
         Logger logger,
         OreveilConfig config,
         AuthoritativeWorldModel worldModel,
-        ExposureService exposureService
+        ExposureService exposureService,
+        ServerCompatibility compatibility
     ) {
         this.logger = logger;
         this.plugin = plugin;
+        this.compatibility = compatibility;
         this.config = config;
         this.worldModel = worldModel;
         this.exposureService = exposureService;
         this.hostBlockResolver = new HostBlockResolver();
         this.metrics = new ObfuscationMetrics();
-        this.transport = TransportFactory.create(plugin, logger, config, worldModel, metrics);
+        this.transport = compatibility.createTransport(plugin, logger, config, worldModel, metrics);
     }
 
     public void start() {
@@ -69,7 +72,7 @@ public final class NetworkObfuscationService {
         this.config = config;
         if (transportChanged) {
             transport.stop();
-            transport = TransportFactory.create(plugin, logger, config, worldModel, metrics);
+            transport = compatibility.createTransport(plugin, logger, config, worldModel, metrics);
             transport.start(config, this::getClientVisibleMaterial);
         } else {
             transport.reload(config, this::getClientVisibleMaterial);
