@@ -10,7 +10,7 @@ public record OreveilConfig(
     boolean obfuscationEnabled,
     boolean revealOnExposure,
     boolean revealNextToNonOccludingBlocks,
-    int revealProximityBlocks,
+    int exposedOreRevealChunkRadius,
     int liveSyncRadiusBlocks,
     int initialSyncChunkRadius,
     boolean saltedDistributionEnabled,

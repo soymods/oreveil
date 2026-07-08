@@ -105,7 +105,9 @@ public final class NetworkObfuscationService {
             return block.getType();
         }
 
-        if (config.revealOnExposure() && exposureService.isLegitimatelyExposed(block)) {
+        if (config.revealOnExposure()
+            && exposureService.isLegitimatelyExposed(block)
+            && isWithinRevealChunks(viewer, block, config.exposedOreRevealChunkRadius())) {
             return block.getType();
         }
 
@@ -117,15 +119,16 @@ public final class NetworkObfuscationService {
         return getClientVisibleMaterial(block, null);
     }
 
-    private static boolean isWithinDistance(Player player, Block block, int radius) {
-        if (player.getWorld() != block.getWorld()) {
+    private static boolean isWithinRevealChunks(Player player, Block block, int radius) {
+        if (player == null || player.getWorld() != block.getWorld() || radius < 0) {
             return false;
         }
-        Location loc = player.getEyeLocation();
-        double dx = loc.getX() - (block.getX() + 0.5);
-        double dy = loc.getY() - (block.getY() + 0.5);
-        double dz = loc.getZ() - (block.getZ() + 0.5);
-        return dx * dx + dy * dy + dz * dz <= (double) radius * radius;
+        int playerChunkX = player.getLocation().getBlockX() >> 4;
+        int playerChunkZ = player.getLocation().getBlockZ() >> 4;
+        int blockChunkX = block.getX() >> 4;
+        int blockChunkZ = block.getZ() >> 4;
+        return Math.abs(playerChunkX - blockChunkX) <= radius
+            && Math.abs(playerChunkZ - blockChunkZ) <= radius;
     }
 
     // -------------------------------------------------------------------------
@@ -181,33 +184,45 @@ public final class NetworkObfuscationService {
         transport.syncBlockToPlayer(player, block, this::getClientVisibleMaterial);
     }
 
-    public void syncNearbyExposedOres(Player player) {
-        int radius = config.revealProximityBlocks();
+    public void syncNewlyNearbyExposedOres(Player player, int fromChunkX, int fromChunkZ) {
+        int radius = config.exposedOreRevealChunkRadius();
         if (radius <= 0) {
             return;
         }
 
-        Location origin = player.getLocation();
-        World world = origin.getWorld();
+        World world = player.getWorld();
         if (world == null) {
             return;
         }
 
-        int centerChunkX = origin.getBlockX() >> 4;
-        int centerChunkZ = origin.getBlockZ() >> 4;
-        int chunkRadius = Math.max(0, (radius + 15) >> 4);
-        for (int dx = -chunkRadius; dx <= chunkRadius; dx++) {
-            for (int dz = -chunkRadius; dz <= chunkRadius; dz++) {
-                int chunkX = centerChunkX + dx;
-                int chunkZ = centerChunkZ + dz;
-                if (!world.isChunkLoaded(chunkX, chunkZ)) {
+        int centerChunkX = player.getLocation().getBlockX() >> 4;
+        int centerChunkZ = player.getLocation().getBlockZ() >> 4;
+        int stepX = Integer.compare(centerChunkX, fromChunkX);
+        int stepZ = Integer.compare(centerChunkZ, fromChunkZ);
+        if (stepX != 0) {
+            int edgeX = centerChunkX + stepX * radius;
+            for (int dz = -radius; dz <= radius; dz++) {
+                syncExposedOresInChunk(player, world, edgeX, centerChunkZ + dz);
+            }
+        }
+        if (stepZ != 0) {
+            int edgeZ = centerChunkZ + stepZ * radius;
+            for (int dx = -radius; dx <= radius; dx++) {
+                if (stepX != 0 && centerChunkX + dx == centerChunkX + stepX * radius) {
                     continue;
                 }
-                for (Block block : worldModel.getProtectedOreBlocksInChunk(world.getChunkAt(chunkX, chunkZ))) {
-                    if (exposureService.isLegitimatelyExposed(block) && isWithinDistance(player, block, radius)) {
-                        transport.syncBlockToPlayer(player, block, this::getClientVisibleMaterial);
-                    }
-                }
+                syncExposedOresInChunk(player, world, centerChunkX + dx, edgeZ);
+            }
+        }
+    }
+
+    private void syncExposedOresInChunk(Player player, World world, int chunkX, int chunkZ) {
+        if (!world.isChunkLoaded(chunkX, chunkZ)) {
+            return;
+        }
+        for (Block block : worldModel.getProtectedOreBlocksInChunk(world.getChunkAt(chunkX, chunkZ))) {
+            if (exposureService.isLegitimatelyExposed(block)) {
+                transport.syncBlockToPlayer(player, block, this::getClientVisibleMaterial);
             }
         }
     }

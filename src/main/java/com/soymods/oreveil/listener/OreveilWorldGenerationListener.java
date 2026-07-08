@@ -15,14 +15,14 @@ public final class OreveilWorldGenerationListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onChunkLoad(ChunkLoadEvent event) {
-        if (!event.isNewChunk()) {
-            return;
-        }
-
         if (!worldGenerationService.shouldMutateNewChunks(event.getWorld())) {
             return;
         }
 
-        worldGenerationService.queueChunkMutation(event.getChunk());
+        if (event.isNewChunk()) {
+            worldGenerationService.mutateChunk(event.getChunk());
+        } else {
+            worldGenerationService.queueChunkMutation(event.getChunk());
+        }
     }
 }

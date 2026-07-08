@@ -15,9 +15,12 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
@@ -43,7 +46,7 @@ import org.bukkit.scheduler.BukkitTask;
 public final class OreveilWorldGenerationService {
     private static final DateTimeFormatter BACKUP_SUFFIX = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
     private static final int CHUNKS_PER_TICK = 2;
-    private static final int GENERATION_PASS_VERSION = 1;
+    private static final int GENERATION_PASS_VERSION = 2;
 
     private final Plugin plugin;
     private final Logger logger;
@@ -135,6 +138,7 @@ public final class OreveilWorldGenerationService {
             mutateOreDistribution(chunk, settings, changedBlocks);
             seedExposedOre(chunk, settings, changedBlocks);
         }
+        relocateVanillaOres(chunk, changedBlocks);
         if (settings.terrainAdjustmentAttemptsPerChunk() > 0) {
             mutateSurfaceTerrain(chunk, settings, changedBlocks);
         }
@@ -143,7 +147,8 @@ public final class OreveilWorldGenerationService {
         }
 
         if (!changedBlocks.isEmpty() && mutationSync != null) {
-            mutationSync.accept(changedBlocks);
+            List<Block> completedChanges = List.copyOf(changedBlocks);
+            Bukkit.getScheduler().runTask(plugin, () -> mutationSync.accept(completedChanges));
         }
         markGenerationPassApplied(chunk);
     }
@@ -588,6 +593,73 @@ public final class OreveilWorldGenerationService {
 
     }
 
+    private void relocateVanillaOres(Chunk chunk, List<Block> changedBlocks) {
+        Random random = seededRandom(chunk, "vanilla-ore-relocation-v2");
+        World world = chunk.getWorld();
+        int minY = compatibility.minBuildHeight(world);
+        int maxY = compatibility.maxBuildHeight(world);
+        int baseX = chunk.getX() << 4;
+        int baseZ = chunk.getZ() << 4;
+        Map<HostBucket, List<Block>> destinations = new HashMap<>();
+        List<RelocatedOre> ores = new ArrayList<>();
+
+        for (int x = baseX; x < baseX + 16; x++) {
+            for (int z = baseZ; z < baseZ + 16; z++) {
+                for (int y = minY; y < maxY; y++) {
+                    Block block = world.getBlockAt(x, y, z);
+                    Material type = block.getType();
+                    Material host = relocationHost(type);
+                    if (host != null) {
+                        ores.add(new RelocatedOre(type, bucket(host, y)));
+                        block.setType(host, false);
+                        changedBlocks.add(block);
+                    } else if (isOreHost(type)) {
+                        destinations.computeIfAbsent(bucket(type, y), ignored -> new ArrayList<>()).add(block);
+                    }
+                }
+            }
+        }
+
+        for (List<Block> candidates : destinations.values()) {
+            Collections.shuffle(candidates, random);
+        }
+        Collections.shuffle(ores, random);
+
+        for (RelocatedOre ore : ores) {
+            List<Block> candidates = destinations.get(ore.bucket());
+            if (candidates == null || candidates.isEmpty()) {
+                logger.warning(
+                    "Could not relocate " + ore.material() + " in managed chunk "
+                        + chunk.getX() + "," + chunk.getZ() + "; the original ore was removed."
+                );
+                continue;
+            }
+            Block destination = candidates.remove(candidates.size() - 1);
+            destination.setType(ore.material(), false);
+            changedBlocks.add(destination);
+        }
+    }
+
+    private HostBucket bucket(Material host, int y) {
+        return new HostBucket(host, Math.floorDiv(y, 16));
+    }
+
+    private boolean isOreHost(Material material) {
+        return material == Material.STONE || Materials.isDeepslate(material) || material == Material.NETHERRACK;
+    }
+
+    static Material relocationHost(Material material) {
+        if (material == Material.NETHER_QUARTZ_ORE
+            || material == Material.NETHER_GOLD_ORE
+            || material == Material.ANCIENT_DEBRIS) {
+            return Material.NETHERRACK;
+        }
+        if (isOverworldOre(material)) {
+            return material.name().startsWith("DEEPSLATE_") ? Materials.DEEPSLATE : Material.STONE;
+        }
+        return null;
+    }
+
     private Material selectOreReplacement(Material current, int y, World.Environment environment, Random random) {
         if (environment == World.Environment.NETHER) {
             if (current == Material.NETHERRACK && random.nextDouble() < 0.35D) {
@@ -623,7 +695,7 @@ public final class OreveilWorldGenerationService {
         return deep ? pickDeepOre(random, y) : pickSurfaceOre(random, y);
     }
 
-    private boolean isOverworldOre(Material material) {
+    private static boolean isOverworldOre(Material material) {
         String name = material.name();
         return name.equals("COAL_ORE")
             || name.equals("DEEPSLATE_COAL_ORE")
@@ -645,7 +717,11 @@ public final class OreveilWorldGenerationService {
 
     private boolean hasOpenNeighbor(Block block) {
         for (BlockFace face : List.of(BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.UP, BlockFace.DOWN)) {
-            Material neighbor = block.getRelative(face).getType();
+            Block relative = block.getRelative(face);
+            if (!isInSameChunk(block, relative)) {
+                continue;
+            }
+            Material neighbor = relative.getType();
             if (neighbor.isAir() || neighbor == Material.WATER || neighbor == Material.LAVA) {
                 return true;
             }
@@ -805,6 +881,9 @@ public final class OreveilWorldGenerationService {
                 default -> BlockFace.DOWN;
             });
 
+            if (!isInSameChunk(origin, neighbor)) {
+                continue;
+            }
             if (!sameHostFamily(neighbor.getType(), ore)) {
                 continue;
             }
@@ -816,6 +895,11 @@ public final class OreveilWorldGenerationService {
                 changedBlocks.add(neighbor);
             }
         }
+    }
+
+    private boolean isInSameChunk(Block first, Block second) {
+        return (first.getX() >> 4) == (second.getX() >> 4)
+            && (first.getZ() >> 4) == (second.getZ() >> 4);
     }
 
     private boolean sameHostFamily(Material host, Material ore) {
@@ -897,5 +981,11 @@ public final class OreveilWorldGenerationService {
     }
 
     private record QueuedChunk(String worldName, int chunkX, int chunkZ) {
+    }
+
+    private record HostBucket(Material host, int sectionY) {
+    }
+
+    private record RelocatedOre(Material material, HostBucket bucket) {
     }
 }

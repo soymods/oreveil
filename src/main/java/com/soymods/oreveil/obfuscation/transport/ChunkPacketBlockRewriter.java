@@ -46,7 +46,7 @@ final class ChunkPacketBlockRewriter {
         int maxHeight,
         OreveilConfig config
     ) {
-        Map<Integer, Material> protectedOres = chunkEntryProvider.buriedProtectedOreEntries(worldId, chunkX, chunkZ);
+        Map<Integer, Material> protectedOres = chunkEntryProvider.protectedOreEntries(worldId, chunkX, chunkZ);
         Map<Integer, Material> salt = chunkEntryProvider.saltEntries(worldId, chunkX, chunkZ);
         if (protectedOres.isEmpty() && salt.isEmpty()) {
             return RewriteResult.unchanged();
@@ -397,7 +397,7 @@ final class ChunkPacketBlockRewriter {
     }
 
     interface ChunkEntryProvider {
-        Map<Integer, Material> buriedProtectedOreEntries(UUID worldId, int chunkX, int chunkZ);
+        Map<Integer, Material> protectedOreEntries(UUID worldId, int chunkX, int chunkZ);
 
         Map<Integer, Material> saltEntries(UUID worldId, int chunkX, int chunkZ);
     }
@@ -408,8 +408,8 @@ final class ChunkPacketBlockRewriter {
 
     private record WorldModelChunkEntryProvider(AuthoritativeWorldModel worldModel) implements ChunkEntryProvider {
         @Override
-        public Map<Integer, Material> buriedProtectedOreEntries(UUID worldId, int chunkX, int chunkZ) {
-            return worldModel.getBuriedProtectedOreEntriesInChunk(worldId, chunkX, chunkZ);
+        public Map<Integer, Material> protectedOreEntries(UUID worldId, int chunkX, int chunkZ) {
+            return worldModel.getProtectedOreEntriesInChunk(worldId, chunkX, chunkZ);
         }
 
         @Override

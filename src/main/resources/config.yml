@@ -2,9 +2,9 @@ obfuscation:
   enabled: true
   reveal-on-exposure: true
   reveal-next-to-non-occluding-blocks: true
-  # Fallback radius for refreshing exposed cave ores while players move.
-  # Actual visibility rule: exposed ores are visible in delivered chunks; buried ores stay hidden.
-  reveal-proximity-blocks: 48
+  # Exposed ores are revealed per player in this chunk radius. Updates occur only
+  # on chunk transitions and block changes rather than continuously while moving.
+  exposed-ore-reveal-chunk-radius: 6
   live-sync-radius-blocks: 64
   initial-sync-chunk-radius: 0
 
@@ -67,6 +67,8 @@ world-generation:
   # Server-private long for managed-world ore remixing. Set this before enabling
   # managed generation so remix positions are not derived from the public seed alone.
   secret: 0
+  # Additional secret-seeded ore attempts. Original vanilla ores are always
+  # relocated when managed generation is enabled, even when this is zero.
   ore-remix-attempts-per-chunk: 28
   terrain-adjustment-attempts-per-chunk: 0
   ruin-fragment-chance: 0.0

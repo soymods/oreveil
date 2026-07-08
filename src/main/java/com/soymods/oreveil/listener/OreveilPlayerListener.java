@@ -38,16 +38,19 @@ public final class OreveilPlayerListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
+        scheduleChunkPrime(event.getPlayer(), event.getPlayer().getLocation(), 10L);
         schedulePrime(event.getPlayer(), event.getPlayer().getLocation(), 10L);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onRespawn(PlayerRespawnEvent event) {
+        scheduleChunkPrime(event.getPlayer(), event.getRespawnLocation(), 10L);
         schedulePrime(event.getPlayer(), event.getRespawnLocation(), 10L);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onWorldChange(PlayerChangedWorldEvent event) {
+        scheduleChunkPrime(event.getPlayer(), event.getPlayer().getLocation(), 10L);
         schedulePrime(event.getPlayer(), event.getPlayer().getLocation(), 10L);
     }
 
@@ -58,6 +61,8 @@ public final class OreveilPlayerListener implements Listener {
         }
 
         if (crossesChunk(event.getFrom(), event.getTo()) || event.getFrom().getWorld() != event.getTo().getWorld()) {
+            scheduleChunkPrime(event.getPlayer(), event.getTo(), 2L);
+            scheduleChunkPrime(event.getPlayer(), event.getTo(), 5L);
             schedulePrime(event.getPlayer(), event.getTo(), 2L);
         }
     }
@@ -70,23 +75,38 @@ public final class OreveilPlayerListener implements Listener {
         if (event.getFrom().getWorld() != event.getTo().getWorld()) {
             return;
         }
-        if (sameBlock(event.getFrom(), event.getTo())) {
+        if (crossesChunk(event.getFrom(), event.getTo())) {
+            scheduleChunkPrime(event.getPlayer(), event.getTo(), 1L);
+            scheduleChunkPrime(event.getPlayer(), event.getTo(), 4L);
+            int fromChunkX = event.getFrom().getBlockX() >> 4;
+            int fromChunkZ = event.getFrom().getBlockZ() >> 4;
+            scheduleExposedOreRefresh(event.getPlayer(), fromChunkX, fromChunkZ, 1L);
+            scheduleExposedOreRefresh(event.getPlayer(), fromChunkX, fromChunkZ, 4L);
+        }
+    }
+
+    private void scheduleExposedOreRefresh(Player player, int fromChunkX, int fromChunkZ, long delayTicks) {
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline()) {
+                obfuscationService.syncNewlyNearbyExposedOres(player, fromChunkX, fromChunkZ);
+            }
+        }, delayTicks);
+    }
+
+    private void scheduleChunkPrime(Player player, Location location, long delayTicks) {
+        if (primerHandlesChunkDelivery() || location.getWorld() == null) {
             return;
         }
 
-        OreveilConfig config = configSupplier.get();
-        if (config.revealProximityBlocks() <= 0) {
-            return;
-        }
-
-        int step = Math.max(4, Math.min(8, config.revealProximityBlocks() / 12));
-        if (Math.abs(event.getFrom().getBlockX() - event.getTo().getBlockX()) < step
-            && Math.abs(event.getFrom().getBlockY() - event.getTo().getBlockY()) < step
-            && Math.abs(event.getFrom().getBlockZ() - event.getTo().getBlockZ()) < step) {
-            return;
-        }
-
-        obfuscationService.syncNearbyExposedOres(event.getPlayer());
+        World targetWorld = location.getWorld();
+        int chunkX = location.getBlockX() >> 4;
+        int chunkZ = location.getBlockZ() >> 4;
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            if (!player.isOnline() || player.getWorld() != targetWorld || !targetWorld.isChunkLoaded(chunkX, chunkZ)) {
+                return;
+            }
+            primer.primeChunk(player, targetWorld.getChunkAt(chunkX, chunkZ));
+        }, delayTicks);
     }
 
     private void schedulePrime(Player player, Location center, long delayTicks) {

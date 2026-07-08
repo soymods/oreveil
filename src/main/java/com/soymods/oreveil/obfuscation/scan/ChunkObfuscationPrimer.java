@@ -24,8 +24,7 @@ public final class ChunkObfuscationPrimer {
 
     public void primeChunk(Player player, Chunk chunk) {
         for (Block block : worldModel.getProtectedOreBlocksInChunk(chunk)) {
-            if (exposureService.isProtectedOre(block.getType())
-                && obfuscationService.getClientVisibleMaterial(block, player) != block.getType()) {
+            if (exposureService.isProtectedOre(block.getType())) {
                 obfuscationService.syncBlockToPlayer(player, block);
             }
         }

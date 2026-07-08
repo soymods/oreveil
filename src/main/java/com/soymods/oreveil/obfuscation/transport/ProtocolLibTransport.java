@@ -356,10 +356,8 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
     private void primeChunkToPlayer(Player player, Chunk chunk) {
         for (Block block : worldModel.getProtectedOreBlocksInChunk(chunk)) {
             Material visibleMaterial = materialResolver.apply(block, player);
-            if (visibleMaterial != block.getType()) {
-                fallback.syncBlockToPlayer(player, block, (b, p) -> visibleMaterial);
-                metrics.recordChunkPrimeCorrection();
-            }
+            fallback.syncBlockToPlayer(player, block, (b, p) -> visibleMaterial);
+            metrics.recordChunkPrimeCorrection();
         }
         for (Block block : worldModel.getSaltBlocksInChunk(chunk)) {
             Material visibleMaterial = materialResolver.apply(block, player);

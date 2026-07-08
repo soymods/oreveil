@@ -183,6 +183,9 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         if (args.length == 3 && args[0].equalsIgnoreCase("world") && args[1].equalsIgnoreCase("seed")) {
             return filter(args[2], List.of("random", "keep"));
         }
+        if (args.length == 3 && args[0].equalsIgnoreCase("world") && args[1].equalsIgnoreCase("target")) {
+            return filter(args[2], List.of("default"));
+        }
         if (args.length == 3 && args[0].equalsIgnoreCase("world") && args[1].equalsIgnoreCase("tp")) {
             return filter(args[2], teleportableWorldTargets());
         }
@@ -533,9 +536,14 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
                 sendError(sender, "Use /" + label + " world target <name>.");
                 return true;
             }
-            String target = args[2].trim();
-            if (target.isEmpty()) {
-                sendError(sender, "Target world name cannot be blank.");
+            if (plugin.worldGenerationService().isOperationRunning()) {
+                sendError(sender, "Wait for the managed-world operation to finish before changing its target.");
+                return true;
+            }
+            String target = args[2].equalsIgnoreCase("default") ? "oreveil" : args[2].trim();
+            String validationError = plugin.worldGenerationService().validateWorldName(target);
+            if (validationError != null) {
+                sendError(sender, validationError);
                 return true;
             }
             plugin.setStringSetting("world-generation.target-world", target);
@@ -1917,18 +1925,18 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         ),
         REVEAL_PROXIMITY(
             "reveal_proximity",
-            "obfuscation.reveal-proximity-blocks",
-            "Exposed Radius",
+            "obfuscation.exposed-ore-reveal-chunk-radius",
+            "Exposed Chunk Radius",
             "Controls",
             CONTROLS,
             SettingType.INTEGER,
             0,
-            96,
-            8,
-            List.of("32", "48", "64"),
+            12,
+            1,
+            List.of("4", "6", "8"),
             List.of(),
-            "Fallback radius for refreshing exposed cave ores while players move.",
-            OreveilConfig::revealProximityBlocks
+            "Chunk radius where exposed cave ores are revealed on chunk transitions.",
+            OreveilConfig::exposedOreRevealChunkRadius
         ),
         SALTED_DISTRIBUTION(
             "salted_distribution",

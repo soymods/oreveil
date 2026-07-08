@@ -324,7 +324,7 @@ public final class OreveilAdminGui implements Listener {
         OreveilConfig config = plugin.oreveilConfig();
         numericRow(inventory, 10, "Live Sync Radius", Material.REPEATER, config.liveSyncRadiusBlocks(), 16);
         numericRow(inventory, 19, "Chunk Prime Radius", Material.COMPARATOR, config.initialSyncChunkRadius(), 1);
-        numericRow(inventory, 28, "Exposed Refresh Radius", Material.REDSTONE, config.revealProximityBlocks(), 8);
+        numericRow(inventory, 28, "Exposed Chunk Radius", Material.REDSTONE, config.exposedOreRevealChunkRadius(), 1);
         back(inventory, 49);
     }
 
@@ -637,15 +637,15 @@ public final class OreveilAdminGui implements Listener {
                 8
             ));
             case 21 -> adjustInteger("obfuscation.initial-sync-chunk-radius", plugin.oreveilConfig().initialSyncChunkRadius(), 1, 0, 8);
-            case 28 -> adjustInteger("obfuscation.reveal-proximity-blocks", plugin.oreveilConfig().revealProximityBlocks(), -8, 0, 96);
+            case 28 -> adjustInteger("obfuscation.exposed-ore-reveal-chunk-radius", plugin.oreveilConfig().exposedOreRevealChunkRadius(), -1, 0, 12);
             case 29 -> openSignInput(player, new PendingSignInput(
-                "obfuscation.reveal-proximity-blocks",
+                "obfuscation.exposed-ore-reveal-chunk-radius",
                 "Exposed Refresh Radius",
-                plugin.oreveilConfig().revealProximityBlocks(),
+                plugin.oreveilConfig().exposedOreRevealChunkRadius(),
                 0,
                 96
             ));
-            case 30 -> adjustInteger("obfuscation.reveal-proximity-blocks", plugin.oreveilConfig().revealProximityBlocks(), 8, 0, 96);
+            case 30 -> adjustInteger("obfuscation.exposed-ore-reveal-chunk-radius", plugin.oreveilConfig().exposedOreRevealChunkRadius(), 1, 0, 12);
             case 49 -> {
                 open(player, Screen.MAIN);
                 return;
@@ -732,8 +732,18 @@ public final class OreveilAdminGui implements Listener {
                 return;
             }
             case 12 -> plugin.toggleBooleanSetting("world-generation.backup-on-regenerate");
-            case 13 -> plugin.setStringSetting("world-generation.target-world", DEFAULT_MANAGED_WORLD);
-            case 14 -> plugin.setNullableLongSetting("world-generation.secret", nonZeroRandomLong());
+            case 13 -> {
+                if (!canChangeManagedWorldIdentity(player)) {
+                    return;
+                }
+                plugin.setStringSetting("world-generation.target-world", DEFAULT_MANAGED_WORLD);
+            }
+            case 14 -> {
+                if (!canChangeManagedWorldIdentity(player)) {
+                    return;
+                }
+                plugin.setNullableLongSetting("world-generation.secret", nonZeroRandomLong());
+            }
             case 16 -> {
                 teleportManaged(player);
                 return;
@@ -764,6 +774,14 @@ public final class OreveilAdminGui implements Listener {
         }
         feedback(player, "Managed-world setting updated.");
         refresh(player, Screen.WORLD);
+    }
+
+    private boolean canChangeManagedWorldIdentity(Player player) {
+        if (!plugin.worldGenerationService().isOperationRunning()) {
+            return true;
+        }
+        feedback(player, "Wait for the managed-world operation to finish before changing its target or secret.");
+        return false;
     }
 
     private void handleConfirm(Player player, int slot, GuiAction action) {
@@ -957,7 +975,7 @@ public final class OreveilAdminGui implements Listener {
         Block block = findSignInputBlock(player);
         if (block == null) {
             feedback(player, "No safe air block nearby for sign input.");
-            open(player, Screen.SYNC);
+            open(player, input.returnScreen());
             return;
         }
 
@@ -966,15 +984,15 @@ public final class OreveilAdminGui implements Listener {
         if (!(block.getState() instanceof Sign sign)) {
             restoreSignInput(input);
             feedback(player, "Could not open sign input.");
-            open(player, Screen.SYNC);
+            open(player, input.returnScreen());
             return;
         }
 
         sign.setEditable(true);
         compatibility.allowSignEditor(sign, player.getUniqueId());
-        sign.setLine(0, String.valueOf(input.current()));
+        sign.setLine(0, input.current());
         sign.setLine(1, input.title());
-        sign.setLine(2, "Min " + input.min() + " Max " + input.max());
+        sign.setLine(2, input.isText() ? "Enter world name" : "Min " + input.min() + " Max " + input.max());
         sign.setLine(3, "Edit line 1");
         sign.update(true, false);
 
@@ -1010,20 +1028,38 @@ public final class OreveilAdminGui implements Listener {
     }
 
     private void applySignInput(Player player, PendingSignInput input, String raw) {
-        String value = raw == null || raw.isBlank() ? String.valueOf(input.current()) : raw.trim();
+        String value = raw == null || raw.isBlank() ? input.current() : raw.trim();
+        if (input.isText()) {
+            if (plugin.worldGenerationService().isOperationRunning()) {
+                feedback(player, "Wait for the managed-world operation to finish before changing its target.");
+                open(player, input.returnScreen());
+                return;
+            }
+            String validationError = plugin.worldGenerationService().validateWorldName(value);
+            if (validationError != null) {
+                feedback(player, validationError);
+                open(player, input.returnScreen());
+                return;
+            }
+            plugin.setStringSetting(input.path(), value);
+            feedback(player, input.title() + " set to " + value + ".");
+            open(player, input.returnScreen());
+            return;
+        }
+
         int parsed;
         try {
             parsed = Integer.parseInt(value);
         } catch (NumberFormatException ignored) {
             feedback(player, input.title() + " needs a whole number.");
-            open(player, Screen.SYNC);
+            open(player, input.returnScreen());
             return;
         }
 
         int clamped = Math.max(input.min(), Math.min(input.max(), parsed));
         plugin.setIntegerSetting(input.path(), clamped);
         feedback(player, input.title() + " set to " + clamped + ".");
-        open(player, Screen.SYNC);
+        open(player, input.returnScreen());
     }
 
     private void restoreSignInput(PendingSignInput input) {
@@ -1298,18 +1334,38 @@ public final class OreveilAdminGui implements Listener {
     private static final class PendingSignInput {
         private final String path;
         private final String title;
-        private final int current;
+        private final String current;
         private final int min;
         private final int max;
+        private final boolean text;
+        private final Screen returnScreen;
         private Block block;
         private BlockData originalData;
 
         private PendingSignInput(String path, String title, int current, int min, int max) {
+            this(path, title, String.valueOf(current), min, max, false, Screen.SYNC);
+        }
+
+        private PendingSignInput(
+            String path,
+            String title,
+            String current,
+            int min,
+            int max,
+            boolean text,
+            Screen returnScreen
+        ) {
             this.path = path;
             this.title = title;
             this.current = current;
             this.min = min;
             this.max = max;
+            this.text = text;
+            this.returnScreen = returnScreen;
+        }
+
+        private static PendingSignInput text(String path, String title, String current, Screen returnScreen) {
+            return new PendingSignInput(path, title, current, 0, 0, true, returnScreen);
         }
 
         private void attach(Block block, BlockData originalData) {
@@ -1329,7 +1385,7 @@ public final class OreveilAdminGui implements Listener {
             return title;
         }
 
-        private int current() {
+        private String current() {
             return current;
         }
 
@@ -1339,6 +1395,14 @@ public final class OreveilAdminGui implements Listener {
 
         private int max() {
             return max;
+        }
+
+        private boolean isText() {
+            return text;
+        }
+
+        private Screen returnScreen() {
+            return returnScreen;
         }
 
         private Block block() {
