@@ -340,6 +340,11 @@ public final class AuthoritativeWorldModel {
         }
     }
 
+    /** Refreshes exposure state without invalidating an unchanged fake-salt host block. */
+    public void refreshExposureState(Block block) {
+        refreshExposure(block);
+    }
+
     // -------------------------------------------------------------------------
     // Salt generation
     // -------------------------------------------------------------------------

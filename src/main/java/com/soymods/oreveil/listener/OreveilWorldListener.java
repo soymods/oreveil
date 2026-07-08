@@ -66,7 +66,7 @@ public final class OreveilWorldListener implements Listener {
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     public void onBlockBreak(BlockBreakEvent event) {
         worldModel.invalidateBlock(event.getBlock());
-        refreshNextTick(BlockNeighborhoods.cardinalNeighborhood(event.getBlock(), 1));
+        refreshExposureNextTick(BlockNeighborhoods.cardinalNeighborhood(event.getBlock(), 1));
         obfuscationService.syncAfterBreak(event.getBlock());
         syncRevealBoundary(event.getBlock());
     }
@@ -183,5 +183,17 @@ public final class OreveilWorldListener implements Listener {
         }
 
         plugin.getServer().getScheduler().runTask(plugin, () -> snapshot.forEach(worldModel::refreshBlock));
+    }
+
+    private void refreshExposureNextTick(Iterable<Block> blocks) {
+        Set<Block> snapshot = new LinkedHashSet<>();
+        for (Block block : blocks) {
+            snapshot.add(block);
+        }
+        if (snapshot.isEmpty()) {
+            return;
+        }
+
+        plugin.getServer().getScheduler().runTask(plugin, () -> snapshot.forEach(worldModel::refreshExposureState));
     }
 }

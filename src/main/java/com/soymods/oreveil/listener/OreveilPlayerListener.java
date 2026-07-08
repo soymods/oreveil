@@ -38,19 +38,16 @@ public final class OreveilPlayerListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
-        scheduleChunkPrime(event.getPlayer(), event.getPlayer().getLocation(), 10L);
         schedulePrime(event.getPlayer(), event.getPlayer().getLocation(), 10L);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onRespawn(PlayerRespawnEvent event) {
-        scheduleChunkPrime(event.getPlayer(), event.getRespawnLocation(), 10L);
         schedulePrime(event.getPlayer(), event.getRespawnLocation(), 10L);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onWorldChange(PlayerChangedWorldEvent event) {
-        scheduleChunkPrime(event.getPlayer(), event.getPlayer().getLocation(), 10L);
         schedulePrime(event.getPlayer(), event.getPlayer().getLocation(), 10L);
     }
 
@@ -61,8 +58,6 @@ public final class OreveilPlayerListener implements Listener {
         }
 
         if (crossesChunk(event.getFrom(), event.getTo()) || event.getFrom().getWorld() != event.getTo().getWorld()) {
-            scheduleChunkPrime(event.getPlayer(), event.getTo(), 2L);
-            scheduleChunkPrime(event.getPlayer(), event.getTo(), 5L);
             schedulePrime(event.getPlayer(), event.getTo(), 2L);
         }
     }
