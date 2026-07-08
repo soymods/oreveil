@@ -184,6 +184,10 @@ public final class OreveilPlugin extends JavaPlugin {
         return worldModel.cacheStats();
     }
 
+    public String compatibilityAdapterName() {
+        return compatibility.adapterName();
+    }
+
     public void openAdminGui(Player player) {
         adminGui.open(player);
     }

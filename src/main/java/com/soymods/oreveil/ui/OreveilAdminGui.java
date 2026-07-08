@@ -287,6 +287,9 @@ public final class OreveilAdminGui implements Listener {
         inventory.setItem(15, toggle(Material.GRASS_BLOCK, "Managed World Generation", config.worldGeneration().enabled(), "Enable Oreveil managed-world features."));
         inventory.setItem(16, item(Material.COMPARATOR, "Transport", TITLE,
             "Current: " + TransportMode.fromConfig(config.transportMode()).name(),
+            "Active: " + plugin.obfuscationService().transportName(),
+            "AUTO prefers ProtocolLib when installed",
+            "and otherwise uses block update sync.",
             "Click to cycle transport mode."
         ));
         back(inventory, 22);
@@ -386,8 +389,10 @@ public final class OreveilAdminGui implements Listener {
         ObfuscationMetrics.Snapshot metrics = plugin.obfuscationService().metricsSnapshot();
         AuthoritativeWorldModel.CacheStats cache = plugin.cacheStats();
         inventory.setItem(10, item(DIAGNOSTICS_ICON, "Transport", TITLE,
+            "Oreveil: " + plugin.getDescription().getVersion(),
+            "Adapter: " + plugin.compatibilityAdapterName(),
             "Active: " + plugin.obfuscationService().transportName(),
-            "Chunk delivery: " + plugin.obfuscationService().handlesChunkDelivery()
+            "Intercepts chunk delivery: " + plugin.obfuscationService().handlesChunkDelivery()
         ));
         inventory.setItem(12, item(Material.COMPARATOR, "Packet Rewrites", TITLE,
             "Block packets: " + metrics.blockChangePacketsRewritten(),

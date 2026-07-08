@@ -175,7 +175,7 @@ Managed world tools:
 
 - Distributed as one universal Paper plugin jar for Minecraft `1.16.x` through `1.21.x` and `26.x`.
 - Selects its server compatibility adapter at runtime; the artifact itself uses Java 16-compatible bytecode.
-- Runtime Java depends on the target jar: Java 16 for `1.16.x`/`1.17.x`, Java 17+ for `1.18.x`-`1.20.4`, Java 21+ for `1.20.5`-`1.21.x`, and Java 25+ for `26.x`.
+- The server's required Java runtime still depends on its Paper version: Java 16 for `1.16.x`/`1.17.x`, Java 17+ for `1.18.x`-`1.20.4`, Java 21+ for `1.20.5`-`1.21.x`, and Java 25+ for `26.x`.
 - Integrates with ProtocolLib when installed. Runtime-incompatible chunk packet rewriting disables itself and falls back to chunk priming plus block update sync; `26.x` currently uses that fallback path for full chunk delivery.
 
 ## Release Readiness

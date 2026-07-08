@@ -24,7 +24,7 @@ This rule set keeps reveal semantics explicit and config-driven while leaving ro
 - When ProtocolLib is present and `transport.mode` resolves to `AUTO` or `PROTOCOLLIB`, Oreveil rewrites outbound `BLOCK_CHANGE` and `MULTI_BLOCK_CHANGE` packets per player.
 - Outbound chunk packets are rewritten directly for cached hidden ore/salt positions when the runtime supports that packet format, then followed by a targeted prime pass for that player.
 - If the server runtime cannot expose block-state IDs or the chunk buffer format changes, Oreveil leaves that chunk packet untouched, records a diagnostics failure, and still uses post-send chunk priming.
-- The `paper-26.x` target currently disables full chunk packet rewriting at startup and relies on chunk priming plus block update sync for chunk delivery corrections.
+- On Paper `26.x`, the universal jar's modern compatibility adapter disables full chunk packet rewriting at startup and relies on chunk priming plus block update sync for chunk delivery corrections.
 
 ## Salted Distribution
 

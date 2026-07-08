@@ -56,7 +56,6 @@ configurations.matching { it.name == "testCompileClasspath" || it.name == "testR
 tasks.processResources {
     val props = mapOf(
         "version" to project.version,
-        "minecraftVersion" to "1.16.x-1.21.x | 26.x",
         "apiVersion" to "1.16",
     )
 

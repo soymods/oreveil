@@ -70,6 +70,8 @@ world-generation:
   ruin-fragment-chance: 0.0
 
 transport:
+  # AUTO uses ProtocolLib when installed and otherwise uses block update sync.
+  # Options: AUTO, BLOCK_UPDATE_SYNC, PROTOCOLLIB
   mode: AUTO
 
 host-blocks:

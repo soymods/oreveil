@@ -332,6 +332,15 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             sender,
             "Status",
             STATUS,
+            Component.text("Oreveil: ", BASE)
+                .append(highlight(plugin.getDescription().getVersion(), STATUS))
+                .append(Component.text("  Adapter: ", BASE))
+                .append(highlight(plugin.compatibilityAdapterName(), STATUS))
+        );
+        sendMessage(
+            sender,
+            "Status",
+            STATUS,
             Component.text("Runtime: ", BASE)
                 .append(highlight(onOff(config.obfuscationEnabled()), config.obfuscationEnabled() ? STATUS : MUTED))
                 .append(Component.text("  Transport: ", BASE))
