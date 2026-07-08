@@ -93,6 +93,22 @@ public final class OreveilAdminGui implements Listener {
         player.openInventory(inventory);
     }
 
+    private void refresh(Player player, Screen screen, int page, Material target) {
+        Inventory inventory = player.getOpenInventory().getTopInventory();
+        if (!(inventory.getHolder() instanceof OreveilGuiHolder holder) || inventory.getSize() != screen.size()) {
+            open(player, screen, page, target);
+            return;
+        }
+
+        draw(inventory, screen, page, target);
+        holder.setView(screen, page, target);
+        player.updateInventory();
+    }
+
+    private void refresh(Player player, Screen screen) {
+        refresh(player, screen, 0, null);
+    }
+
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getView().getTopInventory().getHolder() instanceof OreveilGuiHolder holder)) {
@@ -531,7 +547,7 @@ public final class OreveilAdminGui implements Listener {
         Material material = materials.get(index);
         plugin.toggleMaterialListEntry(kind.path(), material);
         feedback(player, displayMaterial(material) + " toggled.");
-        open(player, kind.screen(), page);
+        refresh(player, kind.screen(), page, null);
     }
 
     private void handleOres(Player player, int slot) {
@@ -544,7 +560,7 @@ public final class OreveilAdminGui implements Listener {
         if (index >= 0 && index < ores.size()) {
             plugin.toggleGlobalProtectedOre(ores.get(index));
             feedback(player, displayMaterial(ores.get(index)) + " toggled.");
-            open(player, Screen.ORES);
+            refresh(player, Screen.ORES);
         }
     }
 
@@ -565,7 +581,7 @@ public final class OreveilAdminGui implements Listener {
             }
         }
         feedback(player, "Runtime setting updated.");
-        open(player, Screen.RUNTIME);
+        refresh(player, Screen.RUNTIME);
     }
 
     private void handleProfiles(Player player, int slot) {
@@ -574,7 +590,7 @@ public final class OreveilAdminGui implements Listener {
         if (index >= 0 && index < XrayProfile.values().length) {
             plugin.setStringSetting("world-model.xray-profile", XrayProfile.values()[index].configName());
             feedback(player, "Xray profile set to " + XrayProfile.values()[index].displayName() + ".");
-            open(player, Screen.PROFILE);
+            refresh(player, Screen.PROFILE);
             return;
         }
         if (slot == 22) {
@@ -623,7 +639,7 @@ public final class OreveilAdminGui implements Listener {
             return;
         }
         feedback(player, "Sync setting updated.");
-        open(player, Screen.SYNC);
+        refresh(player, Screen.SYNC);
     }
 
     private void handleHosts(Player player, int slot) {
@@ -644,7 +660,7 @@ public final class OreveilAdminGui implements Listener {
             }
         }
         feedback(player, "Host block updated.");
-        open(player, Screen.HOSTS);
+        refresh(player, Screen.HOSTS);
     }
 
     private void handleOreOverrides(Player player, int slot) {
@@ -717,7 +733,7 @@ public final class OreveilAdminGui implements Listener {
             }
         }
         feedback(player, "Managed-world setting updated.");
-        open(player, Screen.WORLD);
+        refresh(player, Screen.WORLD);
     }
 
     private void handleConfirm(Player player, int slot, GuiAction action) {
@@ -1315,9 +1331,9 @@ public final class OreveilAdminGui implements Listener {
     }
 
     private static final class OreveilGuiHolder implements InventoryHolder {
-        private final Screen screen;
-        private final Material target;
-        private final int page;
+        private Screen screen;
+        private Material target;
+        private int page;
         private Inventory inventory;
 
         private OreveilGuiHolder(Screen screen, int page, Material target) {
@@ -1333,6 +1349,12 @@ public final class OreveilAdminGui implements Listener {
 
         private void setInventory(Inventory inventory) {
             this.inventory = inventory;
+        }
+
+        private void setView(Screen screen, int page, Material target) {
+            this.screen = screen;
+            this.page = page;
+            this.target = target;
         }
 
         private Screen screen() {
