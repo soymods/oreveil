@@ -22,7 +22,7 @@ import org.bukkit.plugin.Plugin;
 public final class ModernServerCompatibility implements ServerCompatibility {
     @Override
     public String adapterName() {
-        return "modern-1.21";
+        return minecraftMajorVersion() >= 26 ? "modern-26" : "modern-1.21";
     }
 
     @Override
@@ -38,6 +38,11 @@ public final class ModernServerCompatibility implements ServerCompatibility {
     @Override
     public int maxBuildHeight(World world) {
         return world.getMaxHeight();
+    }
+
+    @Override
+    public boolean supportsChunkPacketRewrite() {
+        return minecraftMajorVersion() < 26;
     }
 
     @Override
@@ -80,5 +85,16 @@ public final class ModernServerCompatibility implements ServerCompatibility {
         }
 
         return new BlockUpdateSyncTransport(plugin, logger, metrics, this);
+    }
+
+    private int minecraftMajorVersion() {
+        String version = Bukkit.getMinecraftVersion();
+        int separator = version.indexOf('.');
+        String major = separator >= 0 ? version.substring(0, separator) : version;
+        try {
+            return Integer.parseInt(major);
+        } catch (NumberFormatException exception) {
+            return 1;
+        }
     }
 }

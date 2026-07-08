@@ -2,9 +2,9 @@
 
 # Oreveil
 
-[![Minecraft](https://img.shields.io/badge/Minecraft-1.21.x-00AA00?style=for-the-badge&logo=minecraft)](https://minecraft.net)
+[![Minecraft](https://img.shields.io/badge/Minecraft-1.16.x--1.21.x%20%7C%2026.x-00AA00?style=for-the-badge&logo=minecraft)](https://minecraft.net)
 [![Paper](https://img.shields.io/badge/Paper-Server%20Plugin-FFFFFF?style=for-the-badge&logo=papermc&logoColor=black)](https://papermc.io)
-[![Java](https://img.shields.io/badge/Java-21+-FF6B6B?style=for-the-badge&logo=openjdk)](https://openjdk.org)
+[![Java](https://img.shields.io/badge/Java-Versioned%20Jars-FF6B6B?style=for-the-badge&logo=openjdk)](https://openjdk.org)
 
 Deterministic server-side ore obfuscation and seed-resilient world integrity for Minecraft servers.
 
@@ -62,7 +62,7 @@ Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server
 
 - Rewrite outbound single-block and multi-block update traffic on a per-player basis.
 - Support ProtocolLib-backed transport when available, with a fallback sync path for compatibility.
-- Rewrite cached hidden ore and salt positions in newly delivered chunks, then prime those chunks from a cached protected-ore index so exposed ores can be revealed correctly.
+- Rewrite cached hidden ore and salt positions in newly delivered chunks when the runtime exposes a compatible chunk format, then prime those chunks from a cached protected-ore index so exposed ores can be revealed correctly.
 - Preserve a clean transport boundary for deeper packet integrations.
 
 ## Threat Model
@@ -173,9 +173,9 @@ Managed world tools:
 
 ## Compatibility
 
-- Built for Paper-based servers targeting Minecraft `1.21.x`.
-- Requires Java `21+`.
-- Integrates with ProtocolLib when installed. Runtime-incompatible chunk packet rewriting disables itself and falls back to chunk priming plus block update sync.
+- Built as separate Paper target jars for Minecraft `1.16.x`, `1.17.x`, `1.18.x`, `1.19.x`, `1.20.0`-`1.20.4`, `1.20.5`-`1.20.6`, `1.21.x`, and `26.x`.
+- Runtime Java depends on the target jar: Java 16 for `1.16.x`/`1.17.x`, Java 17+ for `1.18.x`-`1.20.4`, Java 21+ for `1.20.5`-`1.21.x`, and Java 25+ for `26.x`.
+- Integrates with ProtocolLib when installed. Runtime-incompatible chunk packet rewriting disables itself and falls back to chunk priming plus block update sync; `26.x` currently uses that fallback path for full chunk delivery.
 
 ## Release Readiness
 
@@ -204,11 +204,14 @@ cd oreveil
 
 Artifacts are written to `build/libs/`. Current versioned targets are:
 
+- `oreveil-paper-26.x-<version>.jar`
 - `oreveil-paper-1.21-<version>.jar`
+- `oreveil-paper-1.20.5-1.20.6-<version>.jar`
 - `oreveil-paper-1.20.0-1.20.4-<version>.jar`
 - `oreveil-paper-1.19.x-<version>.jar`
 - `oreveil-paper-1.18.x-<version>.jar`
 - `oreveil-paper-1.17.x-<version>.jar`
+- `oreveil-paper-1.16.x-<version>.jar`
 
 ### One-Command Dev Server
 
@@ -248,14 +251,14 @@ Useful options:
 - `--reset-world`: delete the disposable `world`, `world_nether`, and `world_the_end` folders before starting.
 - `--no-build`: skip Gradle build and deploy the existing `build/libs/` jar. Run `./gradlew build -q` first if you need fresh code in the jar.
 - `--prepare-only`: download/provision the dev server and deploy the jar, then exit without starting Paper.
-- `PAPER_VERSION=<version>`: run a different Paper/Minecraft version than `gradle.properties`; versions `1.16.x`, `1.17.x`, `1.18.x`, `1.19.x`, `1.20.0`-`1.20.4`, and `1.21.x` map to matching published jar targets.
+- `PAPER_VERSION=<version>`: run a different Paper/Minecraft version than `gradle.properties`; versions `1.16.x`, `1.17.x`, `1.18.x`, `1.19.x`, `1.20.x`, `1.21.x`, and `26.x` map to matching published jar targets.
 - `PAPER_URL=<url>`: use a specific Paper server jar URL instead of the Paper downloads API.
 - `PROTOCOLLIB_URL=<url>`: override the default ProtocolLib download URL. By default the dev script uses ProtocolLib `4.8.0` for `1.16.x`/`1.17.x` and `5.4.0` for newer targets.
 - `OREVEIL_TARGET=<target>`: deploy a specific versioned artifact target instead of inferring it from `PAPER_VERSION`.
 - `SERVER_PORT=<port>`: write a specific dev server port; when omitted, the script starts at `25565` and picks the next available port.
-- `JAVA_BIN=<path>` or `JAVA16_HOME`/`JAVA17_HOME`/`JAVA21_HOME`: choose the Java runtime used to start Paper. The script requires exact Java 16 for `1.16.x`/`1.17.x`, Java 17 or newer for `1.18.x`-`1.20.4`, and Java 21 or newer for `1.21.x`.
+- `JAVA_BIN=<path>` or `JAVA16_HOME`/`JAVA17_HOME`/`JAVA21_HOME`/`JAVA25_HOME`: choose the Java runtime used to start Paper. The script requires exact Java 16 for `1.16.x`/`1.17.x`, Java 17 or newer for `1.18.x`-`1.20.4`, Java 21 or newer for `1.20.5+`, and Java 25 or newer for `26.x`.
 
-In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joining and moving around. For chunk-packet testing, confirm that chunk rewrite packet/entry counters increase and failures stay at `0`.
+In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joining and moving around. For chunk-packet testing, confirm that chunk rewrite packet/entry counters increase and failures stay at `0`, or that Oreveil logs one chunk rewrite disablement and continues using chunk priming on runtimes where full chunk rewriting is disabled.
 
 ### Project Layout
 
@@ -264,8 +267,8 @@ In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joinin
 - `src/main/java/com/soymods/oreveil/exposure/`: reveal and exposure logic
 - `src/main/java/com/soymods/oreveil/obfuscation/`: packet rewrite pipeline
 - `src/main/java/com/soymods/oreveil/compat/`: version-neutral compatibility contracts and adapter loading
-- `src/compatModern/java/`: Paper `1.21.x` compatibility adapter included in the `paper-1.21` jar
-- `src/compatCaves/java/`: shared compatibility adapter used by the `paper-1.16.x`, `paper-1.17.x`, `paper-1.18.x`, `paper-1.19.x`, and `paper-1.20.0-1.20.4` jars
+- `src/compatModern/java/`: modern compatibility adapter included in the `paper-1.21` and `paper-26.x` jars
+- `src/compatCaves/java/`: shared compatibility adapter used by the `paper-1.16.x`, `paper-1.17.x`, `paper-1.18.x`, `paper-1.19.x`, `paper-1.20.0-1.20.4`, and `paper-1.20.5-1.20.6` jars
 - `src/main/java/com/soymods/oreveil/listener/`: world and player event synchronization
 - `src/main/java/com/soymods/oreveil/ui/`: in-game admin GUI
 - `src/main/resources/`: plugin metadata and configuration
@@ -274,13 +277,13 @@ In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joinin
 
 | Component | Version |
 |-----------|---------|
-| Plugin Version | `0.1.0-SNAPSHOT` |
-| Target Minecraft Version | `1.16.x`-`1.20.4`, `1.21.x` |
-| Java | `21+` |
+| Plugin Version | `0.1.0` |
+| Target Minecraft Version | `1.16.x`-`1.21.x`, `26.x` |
+| Java | Versioned by target jar |
 
 ## Notes
 
-- Oreveil builds separate Paper target jars. The `paper-1.21` jar uses Java 21 bytecode; the `paper-1.16.x` and `paper-1.17.x` jars use Java 16 bytecode; the `paper-1.18.x`, `paper-1.19.x`, and `paper-1.20.0-1.20.4` jars use Java 17 bytecode and share the caves-era compatibility adapter. Paper `1.16.x` must be started with Java 16 because the Paper patcher rejects Java 21.
+- Oreveil builds separate Paper target jars. The `paper-26.x` jar uses Java 25 bytecode; the `paper-1.21` and `paper-1.20.5-1.20.6` jars use Java 21 bytecode; the `paper-1.16.x` and `paper-1.17.x` jars use Java 16 bytecode; the `paper-1.18.x`, `paper-1.19.x`, and `paper-1.20.0-1.20.4` jars use Java 17 bytecode. Paper `1.16.x` must be started with Java 16 because the Paper patcher rejects Java 21.
 - The `paper-1.16.x` jar falls back to pre-Caves-and-Cliffs materials where newer materials such as deepslate, copper, amethyst, and spyglass do not exist.
 - ProtocolLib transport is used automatically when available, depending on `transport.mode`.
-- ProtocolLib chunk packet rewriting is best-effort across `1.21.x`; if the server or ProtocolLib exposes an incompatible chunk packet shape, Oreveil disables that rewrite path for the runtime and keeps the sync fallback active.
+- ProtocolLib chunk packet rewriting is best-effort. If the server or ProtocolLib exposes an incompatible chunk packet shape, Oreveil disables that rewrite path for the runtime and keeps the sync fallback active. The `paper-26.x` jar disables full chunk packet rewriting by default and uses chunk priming plus block update sync.

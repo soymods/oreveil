@@ -22,6 +22,10 @@ public interface ServerCompatibility {
 
     int maxBuildHeight(World world);
 
+    default boolean supportsChunkPacketRewrite() {
+        return true;
+    }
+
     void sendBlockChange(Player player, Block block, Material visibleMaterial);
 
     void allowSignEditor(Sign sign, UUID playerId);

@@ -68,7 +68,9 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
         this.protocolManager = ProtocolLibrary.getProtocolManager();
         this.chunkPacketRewriteDisabled = false;
         fallback.start(config, materialResolver);
-        if (!supportsLevelChunkDataAccess()) {
+        if (!compatibility.supportsChunkPacketRewrite()) {
+            disableChunkPacketRewrite("The " + compatibility.adapterName() + " compatibility adapter does not support this server's MAP_CHUNK format.");
+        } else if (!supportsLevelChunkDataAccess()) {
             disableChunkPacketRewrite("ProtocolLib does not expose MAP_CHUNK buffer access on this version.");
         }
         registerPacketListener();
