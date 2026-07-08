@@ -89,10 +89,10 @@ public final class ModernServerCompatibility implements ServerCompatibility {
 
     private int minecraftMajorVersion() {
         String version = Bukkit.getMinecraftVersion();
-        int separator = version.indexOf('.');
-        String major = separator >= 0 ? version.substring(0, separator) : version;
+        String[] parts = version.split("\\.");
         try {
-            return Integer.parseInt(major);
+            int release = Integer.parseInt(parts[0]);
+            return release == 1 && parts.length > 1 ? Integer.parseInt(parts[1]) : release;
         } catch (NumberFormatException exception) {
             return 1;
         }

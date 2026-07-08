@@ -12,7 +12,7 @@ const root = resolve(new URL("..", import.meta.url).pathname);
 const props = readProperties(join(root, "gradle.properties"));
 const minecraftVersion = process.env.PAPER_VERSION ?? props.minecraft_version ?? "1.21";
 const archivesBaseName = props.archives_base_name ?? "oreveil";
-const pluginVersion = props.plugin_version ?? "0.1.0";
+const pluginVersion = props.plugin_version ?? "0.1.1";
 let targetName;
 try {
   targetName = normalizeTarget(process.env.OREVEIL_TARGET ?? targetForMinecraftVersion(minecraftVersion));
@@ -20,14 +20,14 @@ try {
   console.error(error.message);
   process.exit(1);
 }
-const buildTask = buildTaskForTarget(targetName);
+const buildTask = "build";
 let serverPort = process.env.SERVER_PORT ?? "25565";
 const serverDir = join(root, "build", "dev-server", safePathSegment(minecraftVersion));
 const pluginsDir = join(serverDir, "plugins");
 const paperJar = join(serverDir, "paper.jar");
 const protocolLibJar = join(pluginsDir, "ProtocolLib.jar");
 const protocolLibMarker = join(pluginsDir, ".ProtocolLib.version");
-const pluginJar = join(root, "build", "libs", `${archivesBaseName}-${targetName}-${pluginVersion}.jar`);
+const pluginJar = join(root, "build", "libs", `${archivesBaseName}-${pluginVersion}.jar`);
 const deployedPluginJar = join(pluginsDir, `${archivesBaseName}.jar`);
 
 const args = new Set(process.argv.slice(2));
@@ -338,34 +338,6 @@ function normalizeTarget(target) {
     return "paper-26.x";
   }
   return target;
-}
-
-function buildTaskForTarget(target) {
-  if (target === "paper-1.16.x") {
-    return "Paper116XJar";
-  }
-  if (target === "paper-1.17.x") {
-    return "Paper117XJar";
-  }
-  if (target === "paper-1.18.x") {
-    return "Paper118XJar";
-  }
-  if (target === "paper-1.19.x") {
-    return "Paper119XJar";
-  }
-  if (target === "paper-1.20.0-1.20.4") {
-    return "Paper12001204Jar";
-  }
-  if (target === "paper-1.20.5-1.20.6") {
-    return "Paper12051206Jar";
-  }
-  if (target === "paper-1.21") {
-    return "jar";
-  }
-  if (target === "paper-26.x") {
-    return "Paper26XJar";
-  }
-  return "buildAllTargets";
 }
 
 function protocolLibForTarget(target) {
