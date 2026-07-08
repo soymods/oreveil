@@ -21,6 +21,7 @@ import java.util.Locale;
 import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
@@ -49,6 +50,7 @@ public final class OreveilWorldGenerationService {
     private OreveilConfig config;
     private BukkitTask queueTask;
     private Consumer<List<Block>> mutationSync;
+    private final AtomicBoolean operationRunning = new AtomicBoolean(false);
 
     public OreveilWorldGenerationService(Plugin plugin, Logger logger, OreveilConfig config, ServerCompatibility compatibility) {
         this.plugin = plugin;
@@ -91,7 +93,16 @@ public final class OreveilWorldGenerationService {
     }
 
     public boolean shouldMutateNewChunks(World world) {
-        return settings().enabled() && settings().experimental() && isManagedWorld(world);
+        return settings().enabled() && isManagedWorld(world);
+    }
+
+    public boolean isOperationRunning() {
+        return operationRunning.get();
+    }
+
+    public Long loadedManagedWorldSeed() {
+        World world = Bukkit.getWorld(settings().targetWorldName());
+        return world == null ? null : world.getSeed();
     }
 
     public void queueChunkMutation(Chunk chunk) {
@@ -130,43 +141,67 @@ public final class OreveilWorldGenerationService {
 
     public void createManagedWorldAsync(Long seedOverride, int preloadRadius, WorldOperationListener listener) {
         Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!beginOperation(listener)) {
+                return;
+            }
             listener.onStage("Creating managed world...");
-            WorldRegenerationResult result = createManagedWorld(seedOverride);
+            WorldRegenerationResult result = createManagedWorldInternal(seedOverride);
             if (!result.success()) {
                 listener.onComplete(result);
+                endOperation();
                 return;
             }
 
-            preloadSpawnArea(result.world(), preloadRadius, listener, result);
+            preloadSpawnArea(result.world(), preloadRadius, listener, result, this::endOperation);
         });
     }
 
     public void regenerateManagedWorldAsync(Long seedOverride, int preloadRadius, WorldOperationListener listener) {
         Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!beginOperation(listener)) {
+                return;
+            }
             listener.onStage("Regenerating managed world...");
-            WorldRegenerationResult result = regenerateManagedWorld(seedOverride);
+            WorldRegenerationResult result = regenerateManagedWorldInternal(seedOverride);
             if (!result.success()) {
                 listener.onComplete(result);
+                endOperation();
                 return;
             }
 
-            preloadSpawnArea(result.world(), preloadRadius, listener, result);
+            preloadSpawnArea(result.world(), preloadRadius, listener, result, this::endOperation);
         });
     }
 
     public WorldRegenerationResult createManagedWorld(Long seedOverride) {
-        OreveilWorldGenerationConfig settings = settings();
-        if (!settings.experimental()) {
-            return WorldRegenerationResult.failure("Custom world generation is experimental and currently disabled.");
+        if (!operationRunning.compareAndSet(false, true)) {
+            return WorldRegenerationResult.failure("A managed-world operation is already running.");
         }
+        try {
+            return createManagedWorldInternal(seedOverride);
+        } finally {
+            endOperation();
+        }
+    }
+
+    private WorldRegenerationResult createManagedWorldInternal(Long seedOverride) {
+        OreveilWorldGenerationConfig settings = settings();
         if (!settings.enabled()) {
             return WorldRegenerationResult.failure("World generation is disabled in config.");
         }
 
         String targetWorldName = settings.targetWorldName();
+        String validationError = validateWorldName(targetWorldName);
+        if (validationError != null) {
+            return WorldRegenerationResult.failure(validationError);
+        }
         World existing = Bukkit.getWorld(targetWorldName);
         if (existing != null) {
             return WorldRegenerationResult.failure("Managed world " + targetWorldName + " already exists.");
+        }
+        Path worldPath = Bukkit.getWorldContainer().toPath().resolve(targetWorldName).normalize();
+        if (Files.exists(worldPath)) {
+            return WorldRegenerationResult.failure("World folder " + targetWorldName + " already exists.");
         }
 
         long seed = seedOverride != null ? seedOverride.longValue() : settings.resolveSeed();
@@ -179,15 +214,27 @@ public final class OreveilWorldGenerationService {
     }
 
     public WorldRegenerationResult regenerateManagedWorld(Long seedOverride) {
-        OreveilWorldGenerationConfig settings = settings();
-        if (!settings.experimental()) {
-            return WorldRegenerationResult.failure("Custom world generation is experimental and currently disabled.");
+        if (!operationRunning.compareAndSet(false, true)) {
+            return WorldRegenerationResult.failure("A managed-world operation is already running.");
         }
+        try {
+            return regenerateManagedWorldInternal(seedOverride);
+        } finally {
+            endOperation();
+        }
+    }
+
+    private WorldRegenerationResult regenerateManagedWorldInternal(Long seedOverride) {
+        OreveilWorldGenerationConfig settings = settings();
         if (!settings.enabled()) {
             return WorldRegenerationResult.failure("World generation is disabled in config.");
         }
 
         String targetWorldName = settings.targetWorldName();
+        String validationError = validateWorldName(targetWorldName);
+        if (validationError != null) {
+            return WorldRegenerationResult.failure(validationError);
+        }
         String primaryWorld = Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().get(0).getName();
         if (primaryWorld != null && primaryWorld.equalsIgnoreCase(targetWorldName)) {
             return WorldRegenerationResult.failure(
@@ -209,7 +256,7 @@ public final class OreveilWorldGenerationService {
         }
 
         File worldContainer = Bukkit.getWorldContainer();
-        Path worldPath = worldContainer.toPath().resolve(targetWorldName);
+        Path worldPath = worldContainer.toPath().resolve(targetWorldName).normalize();
         if (Files.exists(worldPath)) {
             try {
                 archiveOrDelete(worldPath, settings.backupOnRegenerate());
@@ -229,6 +276,21 @@ public final class OreveilWorldGenerationService {
     }
 
     public WorldRegenerationResult deleteWorld(String worldName) {
+        if (!operationRunning.compareAndSet(false, true)) {
+            return WorldRegenerationResult.failure("A managed-world operation is already running.");
+        }
+        try {
+            return deleteWorldInternal(worldName);
+        } finally {
+            endOperation();
+        }
+    }
+
+    private WorldRegenerationResult deleteWorldInternal(String worldName) {
+        String validationError = validateWorldName(worldName);
+        if (validationError != null) {
+            return WorldRegenerationResult.failure(validationError);
+        }
         String primaryWorld = Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().get(0).getName();
         if (primaryWorld != null && primaryWorld.equalsIgnoreCase(worldName)) {
             return WorldRegenerationResult.failure("Refusing to delete the server's primary world.");
@@ -247,7 +309,7 @@ public final class OreveilWorldGenerationService {
             }
         }
 
-        Path worldPath = Bukkit.getWorldContainer().toPath().resolve(worldName);
+        Path worldPath = Bukkit.getWorldContainer().toPath().resolve(worldName).normalize();
         if (!Files.exists(worldPath)) {
             return WorldRegenerationResult.failure("World folder " + worldName + " does not exist.");
         }
@@ -263,6 +325,10 @@ public final class OreveilWorldGenerationService {
     }
 
     public WorldRegenerationResult setDefaultWorld(String worldName) {
+        String validationError = validateWorldName(worldName);
+        if (validationError != null) {
+            return WorldRegenerationResult.failure(validationError);
+        }
         Path worldPath = Bukkit.getWorldContainer().toPath().resolve(worldName);
         boolean exists = Files.exists(worldPath.resolve("level.dat")) || Bukkit.getWorld(worldName) != null;
         if (!exists) {
@@ -368,7 +434,8 @@ public final class OreveilWorldGenerationService {
         World world,
         int radius,
         WorldOperationListener listener,
-        WorldRegenerationResult result
+        WorldRegenerationResult result,
+        Runnable onDone
     ) {
         int chunkRadius = Math.max(0, radius);
         int spawnChunkX = world.getSpawnLocation().getBlockX() >> 4;
@@ -382,6 +449,7 @@ public final class OreveilWorldGenerationService {
 
         if (chunks.isEmpty()) {
             listener.onComplete(result);
+            onDone.run();
             return;
         }
 
@@ -393,7 +461,11 @@ public final class OreveilWorldGenerationService {
                 int done = completed.incrementAndGet();
                 listener.onProgress(done, total);
                 if (done == total) {
-                    listener.onComplete(result);
+                    try {
+                        listener.onComplete(result);
+                    } finally {
+                        onDone.run();
+                    }
                 }
             });
         }
@@ -405,8 +477,42 @@ public final class OreveilWorldGenerationService {
             return;
         }
 
-        String backupName = worldPath.getFileName() + "_backup_" + BACKUP_SUFFIX.format(LocalDateTime.now());
-        Files.move(worldPath, worldPath.resolveSibling(backupName), StandardCopyOption.ATOMIC_MOVE);
+        String baseBackupName = worldPath.getFileName() + "_backup_" + BACKUP_SUFFIX.format(LocalDateTime.now());
+        Path backupPath = worldPath.resolveSibling(baseBackupName);
+        int suffix = 1;
+        while (Files.exists(backupPath)) {
+            backupPath = worldPath.resolveSibling(baseBackupName + "-" + suffix);
+            suffix++;
+        }
+        Files.move(worldPath, backupPath, StandardCopyOption.ATOMIC_MOVE);
+    }
+
+    private boolean beginOperation(WorldOperationListener listener) {
+        if (operationRunning.compareAndSet(false, true)) {
+            return true;
+        }
+        listener.onComplete(WorldRegenerationResult.failure("A managed-world operation is already running."));
+        return false;
+    }
+
+    private void endOperation() {
+        operationRunning.set(false);
+    }
+
+    private String validateWorldName(String worldName) {
+        if (worldName == null || worldName.isBlank()) {
+            return "World name cannot be blank.";
+        }
+        if (worldName.contains("/") || worldName.contains("\\") || worldName.equals(".") || worldName.equals("..")) {
+            return "World name cannot contain path separators or traversal segments.";
+        }
+
+        Path container = Bukkit.getWorldContainer().toPath().toAbsolutePath().normalize();
+        Path worldPath = container.resolve(worldName).normalize();
+        if (!worldPath.startsWith(container)) {
+            return "World name must stay inside the server world container.";
+        }
+        return null;
     }
 
     private void deleteRecursively(Path path) throws IOException {
@@ -738,6 +844,7 @@ public final class OreveilWorldGenerationService {
         long mixed = seed
             ^ ((long) chunk.getX() * 341873128712L)
             ^ ((long) chunk.getZ() * 132897987541L)
+            ^ Long.rotateLeft(settings().generationSecret(), 23)
             ^ salt.toLowerCase(Locale.ROOT).hashCode();
         return new Random(mixed);
     }

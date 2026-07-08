@@ -213,12 +213,12 @@ final class ChunkPacketBlockRewriterTest {
             overrides,
             new com.soymods.oreveil.config.OreveilWorldGenerationConfig(
                 false,
-                false,
                 "oreveil",
                 World.Environment.NORMAL,
                 true,
                 true,
                 null,
+                0L,
                 18,
                 8,
                 0.02D

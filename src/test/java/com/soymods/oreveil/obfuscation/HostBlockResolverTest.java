@@ -58,7 +58,7 @@ final class HostBlockResolverTest {
             EnumSet.noneOf(Material.class),
             defaults,
             overrides,
-            new OreveilWorldGenerationConfig(false, false, "oreveil", World.Environment.NORMAL, true, true, null, 18, 8, 0.02D)
+            new OreveilWorldGenerationConfig(false, "oreveil", World.Environment.NORMAL, true, true, null, 0L, 18, 8, 0.02D)
         );
     }
 }

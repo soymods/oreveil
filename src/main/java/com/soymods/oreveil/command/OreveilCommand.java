@@ -618,7 +618,14 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
                 if (args[2].equalsIgnoreCase("keep")) {
-                    seedOverride = plugin.oreveilConfig().worldGeneration().configuredSeed();
+                    seedOverride = plugin.worldGenerationService().loadedManagedWorldSeed();
+                    if (seedOverride == null) {
+                        seedOverride = plugin.oreveilConfig().worldGeneration().configuredSeed();
+                    }
+                    if (seedOverride == null) {
+                        sendError(sender, "Cannot keep the current seed because the managed world is not loaded and no configured seed is set.");
+                        return true;
+                    }
                 }
             }
 
@@ -1350,8 +1357,8 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
                 .append(highlight(worldGeneration.environment().name(), WORLD))
                 .append(Component.text("  Structures: ", BASE))
                 .append(highlight(onOff(worldGeneration.generateStructures()), worldGeneration.generateStructures() ? WORLD : MUTED))
-                .append(Component.text("  Experimental: ", BASE))
-                .append(highlight(onOff(worldGeneration.experimental()), worldGeneration.experimental() ? WORLD : MUTED))
+                .append(Component.text("  Operation: ", BASE))
+                .append(highlight(plugin.worldGenerationService().isOperationRunning() ? "running" : "idle", plugin.worldGenerationService().isOperationRunning() ? STATUS : MUTED))
         );
         sendMessage(
             sender,
@@ -1359,14 +1366,10 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             WORLD,
             Component.text("Seed: ", BASE)
                 .append(highlight(worldGeneration.configuredSeed() == null ? "random" : String.valueOf(worldGeneration.configuredSeed()), WORLD))
+                .append(Component.text("  Secret: ", BASE))
+                .append(highlight(worldGeneration.generationSecret() == 0L ? "missing" : "set", worldGeneration.generationSecret() == 0L ? ERROR : WORLD))
                 .append(Component.text("  Backup: ", BASE))
                 .append(highlight(onOff(worldGeneration.backupOnRegenerate()), worldGeneration.backupOnRegenerate() ? WORLD : MUTED))
-        );
-        sendMessage(
-            sender,
-            "World",
-            WORLD,
-            Component.text("Custom world generation is currently treated as experimental.", BASE)
         );
         sendMessage(
             sender,
@@ -1451,8 +1454,8 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
     private Component worldSummary(OreveilWorldGenerationConfig worldGeneration, String label) {
         return Component.text("Managed world: ", BASE)
             .append(highlight(worldGeneration.targetWorldName(), WORLD))
-            .append(Component.text("  Experimental: ", BASE))
-            .append(highlight(onOff(worldGeneration.experimental()), worldGeneration.experimental() ? WORLD : MUTED))
+            .append(Component.text("  Secret: ", BASE))
+            .append(highlight(worldGeneration.generationSecret() == 0L ? "missing" : "set", worldGeneration.generationSecret() == 0L ? ERROR : WORLD))
             .append(Component.text("  ", BASE))
             .append(action("/" + label + " world status", "open", WORLD, "Open the managed world panel."));
     }
@@ -1995,21 +1998,6 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             "Enables Oreveil's managed world generation features.",
             config -> config.worldGeneration().enabled()
         ),
-        WORLD_GENERATION_EXPERIMENTAL(
-            "world_experimental",
-            "world-generation.experimental",
-            "World Experimental",
-            "World",
-            WORLD,
-            SettingType.BOOLEAN,
-            0,
-            0,
-            0,
-            List.of("on", "off"),
-            List.of(),
-            "Allows experimental managed world generation behavior.",
-            config -> config.worldGeneration().experimental()
-        ),
         WORLD_TARGET(
             "world_target",
             "world-generation.target-world",
@@ -2084,6 +2072,21 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             List.of(),
             "Optional managed world seed. Use random to clear the configured seed.",
             config -> config.worldGeneration().configuredSeed()
+        ),
+        WORLD_SECRET(
+            "world_secret",
+            "world-generation.secret",
+            "World Secret",
+            "World",
+            WORLD,
+            SettingType.LONG,
+            Long.MIN_VALUE,
+            Long.MAX_VALUE,
+            1,
+            List.of("123456789"),
+            List.of(),
+            "Server-private long used to make managed ore remixing independent from the public seed.",
+            config -> config.worldGeneration().generationSecret()
         ),
         ORE_REMIX_ATTEMPTS(
             "ore_remix_attempts",

@@ -59,12 +59,14 @@ world-model:
 
 world-generation:
   enabled: false
-  experimental: false
   target-world: oreveil
   environment: NORMAL
   backup-on-regenerate: true
   generate-structures: true
   seed:
+  # Server-private long for managed-world ore remixing. Set this before enabling
+  # managed generation so remix positions are not derived from the public seed alone.
+  secret: 0
   ore-remix-attempts-per-chunk: 28
   terrain-adjustment-attempts-per-chunk: 0
   ruin-fragment-chance: 0.0

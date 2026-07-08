@@ -209,7 +209,8 @@ public final class OreveilAdminGui implements Listener {
         ));
         inventory.setItem(23, item(Material.MAP, "Managed World", WORLD,
             "Target: " + config.worldGeneration().targetWorldName(),
-            "Generation: " + onOff(config.worldGeneration().enabled())
+            "Generation: " + onOff(config.worldGeneration().enabled()),
+            "Secret: " + (config.worldGeneration().generationSecret() == 0L ? "missing" : "set")
         ));
     }
 
@@ -425,7 +426,8 @@ public final class OreveilAdminGui implements Listener {
         inventory.setItem(11, item(Material.WRITABLE_BOOK, "Create World Flow", TITLE,
             "Click Create Managed World.",
             "Review the confirmation screen.",
-            "Confirm to enable generation and create it."
+            "Confirm to enable generation and create it.",
+            "Secret: " + (world.generationSecret() == 0L ? "missing" : "set")
         ));
         inventory.setItem(12, toggle(Material.CHEST, "Backup On Regenerate", world.backupOnRegenerate(),
             "Move the old world folder aside",
@@ -774,9 +776,6 @@ public final class OreveilAdminGui implements Listener {
     private void enableManagedWorldGenerationForGuiAction() {
         if (!plugin.oreveilConfig().worldGeneration().enabled()) {
             plugin.setBooleanSetting("world-generation.enabled", true);
-        }
-        if (!plugin.oreveilConfig().worldGeneration().experimental()) {
-            plugin.setBooleanSetting("world-generation.experimental", true);
         }
     }
 

@@ -31,3 +31,9 @@ This rule set keeps reveal semantics explicit and config-driven while leaving ro
 - Salted distribution uses `world-model.salt-secret` in addition to the world seed and chunk coordinates.
 - Server owners should set `salt-secret` to a private random long before enabling `world-model.salted-distribution`.
 - Changing the secret changes fake ore placement and forces clients to be resynced on reload.
+
+## Managed World Generation
+
+- Managed-world ore remixing uses `world-generation.secret` in addition to the world seed, chunk coordinates, and mutation pass name.
+- Server owners should set `world-generation.secret` to a private random long before enabling `world-generation.enabled`.
+- Public seed knowledge is not enough to predict Oreveil's managed-world ore remix layer when the generation secret is private.

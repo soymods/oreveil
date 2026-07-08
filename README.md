@@ -36,6 +36,7 @@ Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server
 
 - Maintain a server-authoritative record of protected ore positions.
 - Support salted or non-vanilla ore placement strategies using a server-private salt so fake ore signals do not derive from the public world seed alone.
+- Support managed-world ore remixing with a separate server-private generation secret, so regenerated worlds are not predictable from the public seed alone.
 - Reduce the value of seed-cracking pipelines and pathing heuristics.
 
 ## Feature Overview
@@ -167,6 +168,7 @@ Managed world tools:
 /oreveil world status
 /oreveil world target oreveil
 /oreveil world seed random
+/oreveil set world_secret 123456789
 /oreveil world create
 /oreveil world regenerate confirm
 ```

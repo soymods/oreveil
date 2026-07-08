@@ -70,6 +70,12 @@ public final class OreveilConfigLoader {
                     + "Set world-model.salt-secret to a private random long for seed-resilient fake ore placement."
             );
         }
+        if (oreveilConfig.worldGeneration().enabled() && oreveilConfig.worldGeneration().generationSecret() == 0L) {
+            logger.warning(
+                "world-generation.enabled is true with secret=0. "
+                    + "Set world-generation.secret to a private random long for seed-resilient managed ore remixing."
+            );
+        }
 
         return oreveilConfig;
     }
@@ -168,12 +174,12 @@ public final class OreveilConfigLoader {
         if (section == null) {
             return new OreveilWorldGenerationConfig(
                 false,
-                false,
                 "oreveil",
                 World.Environment.NORMAL,
                 true,
                 true,
                 null,
+                0L,
                 28,
                 0,
                 0.0D
@@ -209,12 +215,12 @@ public final class OreveilConfigLoader {
 
         return new OreveilWorldGenerationConfig(
             section.getBoolean("enabled", false),
-            section.getBoolean("experimental", false),
             targetWorldName,
             environment,
             section.getBoolean("backup-on-regenerate", true),
             section.getBoolean("generate-structures", true),
             configuredSeed,
+            parseLong(section.get("secret"), "world-generation.secret", 0L),
             Math.max(0, section.getInt("ore-remix-attempts-per-chunk", 28)),
             Math.max(0, section.getInt("terrain-adjustment-attempts-per-chunk", 0)),
             Math.max(0.0D, Math.min(1.0D, section.getDouble("ruin-fragment-chance", 0.0D)))
