@@ -395,13 +395,19 @@ public final class OreveilAdminGui implements Listener {
 
     private void drawWorld(Inventory inventory) {
         OreveilWorldGenerationConfig world = plugin.oreveilConfig().worldGeneration();
-        inventory.setItem(10, toggle(Material.GRASS_BLOCK, "World Generation", world.enabled(), "Enable managed-world features."));
-        inventory.setItem(11, toggle(Material.TNT, "Experimental", world.experimental(), "Allow experimental managed-world behavior."));
-        inventory.setItem(12, toggle(Material.CHEST, "Backup On Regenerate", world.backupOnRegenerate(), "Back up the world folder before regeneration."));
-        inventory.setItem(13, toggle(Material.STRUCTURE_BLOCK, "Generate Structures", world.generateStructures(), "Use vanilla structure generation."));
-        inventory.setItem(15, item(Material.MAP, "Target World", WORLD,
+        inventory.setItem(10, item(Material.MAP, "Target World", WORLD,
             world.targetWorldName(),
-            "Use /oreveil world target <name> to change it."
+            "Oreveil creates/regenerates this world.",
+            "Use /oreveil world target <name>."
+        ));
+        inventory.setItem(11, item(Material.WRITABLE_BOOK, "Create World Flow", TITLE,
+            "Click Create Managed World.",
+            "Review the confirmation screen.",
+            "Confirm to enable generation and create it."
+        ));
+        inventory.setItem(12, toggle(Material.CHEST, "Backup On Regenerate", world.backupOnRegenerate(),
+            "Move the old world folder aside",
+            "before creating a replacement."
         ));
         inventory.setItem(16, item(Material.ENDER_PEARL, "Teleport", WORLD,
             "Teleport to " + world.targetWorldName() + ".",
@@ -409,10 +415,13 @@ public final class OreveilAdminGui implements Listener {
         ));
         inventory.setItem(19, item(Material.LIME_CONCRETE, "Create Managed World", ORES,
             "Create " + world.targetWorldName() + ".",
-            "Requires generation and experimental mode."
+            "Confirmation enables managed-world",
+            "generation automatically."
         ));
         inventory.setItem(20, item(Material.ORANGE_CONCRETE, "Regenerate Managed World", CONTROLS,
             "Recreate " + world.targetWorldName() + ".",
+            "Confirmation enables managed-world",
+            "generation automatically.",
             "Confirmation required."
         ));
         inventory.setItem(21, item(Material.RED_CONCRETE, "Delete Managed World", ERROR,
@@ -678,10 +687,7 @@ public final class OreveilAdminGui implements Listener {
 
     private void handleWorld(Player player, int slot) {
         switch (slot) {
-            case 10 -> plugin.toggleBooleanSetting("world-generation.enabled");
-            case 11 -> plugin.toggleBooleanSetting("world-generation.experimental");
             case 12 -> plugin.toggleBooleanSetting("world-generation.backup-on-regenerate");
-            case 13 -> plugin.toggleBooleanSetting("world-generation.generate-structures");
             case 16 -> {
                 teleportManaged(player);
                 return;
@@ -724,8 +730,14 @@ public final class OreveilAdminGui implements Listener {
         }
 
         switch (action) {
-            case CREATE_WORLD -> runWorldOperation(player, listener -> plugin.worldGenerationService().createManagedWorldAsync(null, 3, listener));
-            case REGENERATE_WORLD -> runWorldOperation(player, listener -> plugin.worldGenerationService().regenerateManagedWorldAsync(null, 3, listener));
+            case CREATE_WORLD -> {
+                enableManagedWorldGenerationForGuiAction();
+                runWorldOperation(player, listener -> plugin.worldGenerationService().createManagedWorldAsync(null, 3, listener));
+            }
+            case REGENERATE_WORLD -> {
+                enableManagedWorldGenerationForGuiAction();
+                runWorldOperation(player, listener -> plugin.worldGenerationService().regenerateManagedWorldAsync(null, 3, listener));
+            }
             case DELETE_WORLD -> {
                 WorldRegenerationResult result = plugin.worldGenerationService().deleteWorld(plugin.oreveilConfig().worldGeneration().targetWorldName());
                 handleWorldResult(player, result);
@@ -734,6 +746,15 @@ public final class OreveilAdminGui implements Listener {
                 WorldRegenerationResult result = plugin.worldGenerationService().setDefaultWorld(plugin.oreveilConfig().worldGeneration().targetWorldName());
                 handleWorldResult(player, result);
             }
+        }
+    }
+
+    private void enableManagedWorldGenerationForGuiAction() {
+        if (!plugin.oreveilConfig().worldGeneration().enabled()) {
+            plugin.setBooleanSetting("world-generation.enabled", true);
+        }
+        if (!plugin.oreveilConfig().worldGeneration().experimental()) {
+            plugin.setBooleanSetting("world-generation.experimental", true);
         }
     }
 
@@ -752,11 +773,17 @@ public final class OreveilAdminGui implements Listener {
     }
 
     private ItemStack toggle(Material material, String name, boolean enabled, String description) {
+        return toggle(material, name, enabled, new String[] {description});
+    }
+
+    private ItemStack toggle(Material material, String name, boolean enabled, String... description) {
+        String[] lore = new String[description.length + 2];
+        lore[0] = "Status: " + onOff(enabled);
+        System.arraycopy(description, 0, lore, 1, description.length);
+        lore[lore.length - 1] = "Click to toggle.";
         return item(material, name, enabled ? ORES : MUTED,
             enabled,
-            "Status: " + onOff(enabled),
-            description,
-            "Click to toggle."
+            lore
         );
     }
 
@@ -1199,8 +1226,8 @@ public final class OreveilAdminGui implements Listener {
 
         String confirmLore(String worldName) {
             return switch (this) {
-                case CREATE_WORLD -> "Create " + worldName + " now.";
-                case REGENERATE_WORLD -> "This rotates the old world folder first.";
+                case CREATE_WORLD -> "Enables managed-world generation and creates it.";
+                case REGENERATE_WORLD -> "Enables generation and rotates the old folder first.";
                 case DELETE_WORLD -> "This removes the managed world folder.";
                 case SET_DEFAULT_WORLD -> "This updates server.properties for restart.";
             };
