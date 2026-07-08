@@ -67,6 +67,7 @@ public final class OreveilAdminGui implements Listener {
     private final OreveilPlugin plugin;
     private final ServerCompatibility compatibility;
     private final Map<UUID, PendingSignInput> signInputs = new HashMap<>();
+    private boolean headTextureFailureLogged;
 
     public OreveilAdminGui(OreveilPlugin plugin, ServerCompatibility compatibility) {
         this.plugin = plugin;
@@ -848,6 +849,11 @@ public final class OreveilAdminGui implements Listener {
         try {
             applyHeadTexture(meta, icon);
         } catch (ReflectiveOperationException | MalformedURLException | IllegalArgumentException exception) {
+            if (!headTextureFailureLogged) {
+                headTextureFailureLogged = true;
+                plugin.getLogger().warning("Custom GUI head textures are unavailable: "
+                    + exception.getClass().getSimpleName() + ": " + exception.getMessage());
+            }
             return item(icon.fallback(), name, color, active, lore);
         }
         if (active && ACTIVE_ITEM_ENCHANTMENT != null) {
@@ -862,10 +868,12 @@ public final class OreveilAdminGui implements Listener {
         throws ReflectiveOperationException, MalformedURLException {
         Method createProfile = Bukkit.class.getMethod("createPlayerProfile", UUID.class);
         Object profile = createProfile.invoke(null, UUID.nameUUIDFromBytes(icon.textureUrl().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-        Object textures = profile.getClass().getMethod("getTextures").invoke(profile);
-        Method setSkin = textures.getClass().getMethod("setSkin", java.net.URL.class);
+        Class<?> profileType = Class.forName("org.bukkit.profile.PlayerProfile");
+        Object textures = profileType.getMethod("getTextures").invoke(profile);
+        Class<?> texturesType = Class.forName("org.bukkit.profile.PlayerTextures");
+        Method setSkin = texturesType.getMethod("setSkin", java.net.URL.class);
         setSkin.invoke(textures, URI.create(icon.textureUrl()).toURL());
-        Method setOwnerProfile = meta.getClass().getMethod("setOwnerProfile", profile.getClass());
+        Method setOwnerProfile = SkullMeta.class.getMethod("setOwnerProfile", profileType);
         setOwnerProfile.invoke(meta, profile);
     }
 
@@ -1182,14 +1190,14 @@ public final class OreveilAdminGui implements Listener {
     }
 
     private enum HeadIcon {
-        LEFT("http://textures.minecraft.net/texture/37aee9a75bf0df7897183015cca0b2a7d755c63388ff01752d5f4419fc645", Material.ARROW),
-        RIGHT("http://textures.minecraft.net/texture/682ad1b9cb4dd21259c0d75aa315ff389c3cef752be3949338164bac84a96e", Material.ARROW),
-        CHECK("http://textures.minecraft.net/texture/a79a5c95ee17abfef45c8dc224189964944d560f19a44f19f8a46aef3fee4756", Material.LIME_CONCRETE),
-        X("http://textures.minecraft.net/texture/27548362a24c0fa8453e4d93e68c5969ddbde57bf6666c0319c1ed1e84d89065", Material.BARRIER),
-        PLUS("http://textures.minecraft.net/texture/9a2d891c6ae9f6baa040d736ab84d48344bb6b70d7f1a280dd12cbac4d777", Material.LIME_STAINED_GLASS_PANE),
-        MINUS("http://textures.minecraft.net/texture/935e4e26eafc11b52c11668e1d6634e7d1d0d21c411cb085f9394268eb4cdfba", Material.RED_STAINED_GLASS_PANE),
-        INFO("http://textures.minecraft.net/texture/d01afe973c5482fdc71e6aa10698833c79c437f21308ea9a1a095746ec274a0f", Material.BOOK),
-        REFRESH("http://textures.minecraft.net/texture/3a4fab3fd97eb7ecf48ab4fd327e093e886f4e217aab69585313c27a5035831a", Material.CHEST);
+        LEFT("https://textures.minecraft.net/texture/37aee9a75bf0df7897183015cca0b2a7d755c63388ff01752d5f4419fc645", Material.ARROW),
+        RIGHT("https://textures.minecraft.net/texture/682ad1b9cb4dd21259c0d75aa315ff389c3cef752be3949338164bac84a96e", Material.ARROW),
+        CHECK("https://textures.minecraft.net/texture/a79a5c95ee17abfef45c8dc224189964944d560f19a44f19f8a46aef3fee4756", Material.LIME_CONCRETE),
+        X("https://textures.minecraft.net/texture/27548362a24c0fa8453e4d93e68c5969ddbde57bf6666c0319c1ed1e84d89065", Material.BARRIER),
+        PLUS("https://textures.minecraft.net/texture/9a2d891c6ae9f6baa040d736ab84d48344bb6b70d7f1a280dd12cbac4d777", Material.LIME_STAINED_GLASS_PANE),
+        MINUS("https://textures.minecraft.net/texture/935e4e26eafc11b52c11668e1d6634e7d1d0d21c411cb085f9394268eb4cdfba", Material.RED_STAINED_GLASS_PANE),
+        INFO("https://textures.minecraft.net/texture/d01afe973c5482fdc71e6aa10698833c79c437f21308ea9a1a095746ec274a0f", Material.BOOK),
+        REFRESH("https://textures.minecraft.net/texture/3a4fab3fd97eb7ecf48ab4fd327e093e886f4e217aab69585313c27a5035831a", Material.CHEST);
 
         private final String textureUrl;
         private final Material fallback;
