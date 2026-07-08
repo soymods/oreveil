@@ -355,12 +355,12 @@ function protocolLibForTarget(target) {
 }
 
 function selectJavaRuntime(target) {
-  const required = requiredJavaMajorForTarget(target);
-  if (required == null) {
+  const requirement = javaRequirementForTarget(target);
+  if (requirement == null) {
     return { bin: process.env.JAVA_BIN ?? "java", major: "default" };
   }
 
-  const candidates = javaCandidates(required);
+  const candidates = javaCandidates(requirement.major);
   const checked = [];
   for (const candidate of candidates) {
     const major = javaMajor(candidate.bin);
@@ -368,30 +368,35 @@ function selectJavaRuntime(target) {
       continue;
     }
     checked.push(`${candidate.label}: Java ${major}`);
-    if (major === required) {
+    if (matchesJavaRequirement(major, requirement)) {
       return { bin: candidate.bin, major };
     }
   }
 
   const details = checked.length > 0 ? ` Checked: ${checked.join(", ")}.` : "";
+  const versionText = requirement.exact ? `Java ${requirement.major}` : `Java ${requirement.major} or newer`;
   throw new Error(
-    `Oreveil target ${target} needs Java ${required} to run its Paper dev server.`
-      + ` Set JAVA_BIN to a Java ${required} executable, or set JAVA${required}_HOME/JAVA_${required}_HOME.`
+    `Oreveil target ${target} needs ${versionText} to run its Paper dev server.`
+      + ` Set JAVA_BIN to a matching Java executable, or set JAVA${requirement.major}_HOME/JAVA_${requirement.major}_HOME.`
       + details
   );
 }
 
-function requiredJavaMajorForTarget(target) {
+function javaRequirementForTarget(target) {
   if (target === "paper-1.16.x" || target === "paper-1.17.x") {
-    return 16;
+    return { major: 16, exact: true };
   }
   if (target === "paper-1.18.x" || target === "paper-1.19.x" || target === "paper-1.20.0-1.20.4") {
-    return 17;
+    return { major: 17, exact: false };
   }
   if (target === "paper-1.21") {
-    return 21;
+    return { major: 21, exact: false };
   }
   return null;
+}
+
+function matchesJavaRequirement(actualMajor, requirement) {
+  return requirement.exact ? actualMajor === requirement.major : actualMajor >= requirement.major;
 }
 
 function javaCandidates(required) {
