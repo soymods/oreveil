@@ -3,8 +3,10 @@ package com.soymods.oreveil.world;
 import com.soymods.oreveil.compat.ServerCompatibility;
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.config.OreveilWorldGenerationConfig;
+import com.soymods.oreveil.util.Materials;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -22,7 +24,6 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
-import net.kyori.adventure.util.TriState;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.HeightMap;
@@ -325,14 +326,25 @@ public final class OreveilWorldGenerationService {
         WorldCreator creator = WorldCreator.name(name)
             .environment(settings.environment())
             .seed(seed)
-            .generateStructures(settings.generateStructures())
-            .keepSpawnLoaded(TriState.FALSE);
+            .generateStructures(settings.generateStructures());
+        disableSpawnChunkLoading(creator);
         World world = creator.createWorld();
         if (world == null) {
             throw new IllegalStateException("Bukkit returned null while creating world " + name + '.');
         }
         logger.info("Created Oreveil managed world " + name + " with seed=" + seed + ".");
         return world;
+    }
+
+    private void disableSpawnChunkLoading(WorldCreator creator) {
+        try {
+            Class<?> triStateType = Class.forName("net.kyori.adventure.util.TriState");
+            Object falseValue = Enum.valueOf((Class<? extends Enum>) triStateType.asSubclass(Enum.class), "FALSE");
+            Method method = creator.getClass().getMethod("keepSpawnLoaded", triStateType);
+            method.invoke(creator, falseValue);
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            // Older Paper APIs do not expose spawn chunk loading control on WorldCreator.
+        }
     }
 
     private void flushQueuedChunks() {
@@ -449,8 +461,8 @@ public final class OreveilWorldGenerationService {
             return null;
         }
 
-        if (current == Material.STONE || current == Material.DEEPSLATE) {
-            boolean deep = current == Material.DEEPSLATE || y < 0;
+        if (current == Material.STONE || Materials.isDeepslate(current)) {
+            boolean deep = Materials.isDeepslate(current) || y < 0;
             if (random.nextDouble() < 0.22D) {
                 return deep ? pickDeepOre(random, y) : pickSurfaceOre(random, y);
             }
@@ -468,26 +480,32 @@ public final class OreveilWorldGenerationService {
             return null;
         }
 
-        if (current != Material.STONE && current != Material.DEEPSLATE) {
+        if (current != Material.STONE && !Materials.isDeepslate(current)) {
             return null;
         }
 
-        boolean deep = current == Material.DEEPSLATE || y < 0;
+        boolean deep = Materials.isDeepslate(current) || y < 0;
         return deep ? pickDeepOre(random, y) : pickSurfaceOre(random, y);
     }
 
     private boolean isOverworldOre(Material material) {
-        return switch (material) {
-            case COAL_ORE, DEEPSLATE_COAL_ORE,
-                COPPER_ORE, DEEPSLATE_COPPER_ORE,
-                IRON_ORE, DEEPSLATE_IRON_ORE,
-                GOLD_ORE, DEEPSLATE_GOLD_ORE,
-                REDSTONE_ORE, DEEPSLATE_REDSTONE_ORE,
-                EMERALD_ORE, DEEPSLATE_EMERALD_ORE,
-                LAPIS_ORE, DEEPSLATE_LAPIS_ORE,
-                DIAMOND_ORE, DEEPSLATE_DIAMOND_ORE -> true;
-            default -> false;
-        };
+        String name = material.name();
+        return name.equals("COAL_ORE")
+            || name.equals("DEEPSLATE_COAL_ORE")
+            || name.equals("COPPER_ORE")
+            || name.equals("DEEPSLATE_COPPER_ORE")
+            || name.equals("IRON_ORE")
+            || name.equals("DEEPSLATE_IRON_ORE")
+            || name.equals("GOLD_ORE")
+            || name.equals("DEEPSLATE_GOLD_ORE")
+            || name.equals("REDSTONE_ORE")
+            || name.equals("DEEPSLATE_REDSTONE_ORE")
+            || name.equals("EMERALD_ORE")
+            || name.equals("DEEPSLATE_EMERALD_ORE")
+            || name.equals("LAPIS_ORE")
+            || name.equals("DEEPSLATE_LAPIS_ORE")
+            || name.equals("DIAMOND_ORE")
+            || name.equals("DEEPSLATE_DIAMOND_ORE");
     }
 
     private boolean hasOpenNeighbor(Block block) {
@@ -507,14 +525,14 @@ public final class OreveilWorldGenerationService {
         if (y > 48) {
             return switch (random.nextInt(3)) {
                 case 0 -> Material.COAL_ORE;
-                case 1 -> Material.COPPER_ORE;
+                case 1 -> pick(Materials.COPPER_ORE, Material.IRON_ORE);
                 default -> Material.IRON_ORE;
             };
         }
         if (y > 16) {
             return switch (random.nextInt(4)) {
                 case 0 -> Material.IRON_ORE;
-                case 1 -> Material.COPPER_ORE;
+                case 1 -> pick(Materials.COPPER_ORE, Material.IRON_ORE);
                 case 2 -> Material.GOLD_ORE;
                 default -> Material.LAPIS_ORE;
             };
@@ -531,19 +549,23 @@ public final class OreveilWorldGenerationService {
     private Material pickDeepOre(Random random, int y) {
         if (y < -32) {
             return switch (random.nextInt(4)) {
-                case 0 -> Material.DEEPSLATE_DIAMOND_ORE;
-                case 1 -> Material.DEEPSLATE_REDSTONE_ORE;
-                case 2 -> Material.DEEPSLATE_GOLD_ORE;
-                default -> Material.DEEPSLATE_LAPIS_ORE;
+                case 0 -> pick(Materials.DEEPSLATE_DIAMOND_ORE, Material.DIAMOND_ORE);
+                case 1 -> pick(Materials.DEEPSLATE_REDSTONE_ORE, Material.REDSTONE_ORE);
+                case 2 -> pick(Materials.DEEPSLATE_GOLD_ORE, Material.GOLD_ORE);
+                default -> pick(Materials.DEEPSLATE_LAPIS_ORE, Material.LAPIS_ORE);
             };
         }
         return switch (random.nextInt(5)) {
-            case 0 -> Material.DEEPSLATE_IRON_ORE;
-            case 1 -> Material.DEEPSLATE_COPPER_ORE;
-            case 2 -> Material.DEEPSLATE_GOLD_ORE;
-            case 3 -> Material.DEEPSLATE_REDSTONE_ORE;
-            default -> Material.DEEPSLATE_COAL_ORE;
+            case 0 -> pick(Materials.DEEPSLATE_IRON_ORE, Material.IRON_ORE);
+            case 1 -> pick(Materials.DEEPSLATE_COPPER_ORE, pick(Materials.COPPER_ORE, Material.IRON_ORE));
+            case 2 -> pick(Materials.DEEPSLATE_GOLD_ORE, Material.GOLD_ORE);
+            case 3 -> pick(Materials.DEEPSLATE_REDSTONE_ORE, Material.REDSTONE_ORE);
+            default -> pick(Materials.DEEPSLATE_COAL_ORE, Material.COAL_ORE);
         };
+    }
+
+    private Material pick(Material preferred, Material fallback) {
+        return preferred == null ? fallback : preferred;
     }
 
     private void mutateSurfaceTerrain(Chunk chunk, OreveilWorldGenerationConfig settings, List<Block> changedBlocks) {
@@ -604,17 +626,32 @@ public final class OreveilWorldGenerationService {
             return 0.035D;
         }
 
-        return switch (ore) {
-            case COAL_ORE, DEEPSLATE_COAL_ORE -> 0.030D;
-            case COPPER_ORE, DEEPSLATE_COPPER_ORE -> 0.028D;
-            case IRON_ORE, DEEPSLATE_IRON_ORE -> 0.024D;
-            case GOLD_ORE, DEEPSLATE_GOLD_ORE -> y < 32 ? 0.020D : 0.010D;
-            case LAPIS_ORE, DEEPSLATE_LAPIS_ORE -> 0.018D;
-            case REDSTONE_ORE, DEEPSLATE_REDSTONE_ORE -> y < 0 ? 0.022D : 0.008D;
-            case DIAMOND_ORE, DEEPSLATE_DIAMOND_ORE -> y < -16 ? 0.016D : 0.006D;
-            case EMERALD_ORE, DEEPSLATE_EMERALD_ORE -> y > 80 ? 0.012D : 0.002D;
-            default -> 0.0D;
-        };
+        String name = ore.name();
+        if (name.equals("COAL_ORE") || name.equals("DEEPSLATE_COAL_ORE")) {
+            return 0.030D;
+        }
+        if (name.equals("COPPER_ORE") || name.equals("DEEPSLATE_COPPER_ORE")) {
+            return 0.028D;
+        }
+        if (name.equals("IRON_ORE") || name.equals("DEEPSLATE_IRON_ORE")) {
+            return 0.024D;
+        }
+        if (name.equals("GOLD_ORE") || name.equals("DEEPSLATE_GOLD_ORE")) {
+            return y < 32 ? 0.020D : 0.010D;
+        }
+        if (name.equals("LAPIS_ORE") || name.equals("DEEPSLATE_LAPIS_ORE")) {
+            return 0.018D;
+        }
+        if (name.equals("REDSTONE_ORE") || name.equals("DEEPSLATE_REDSTONE_ORE")) {
+            return y < 0 ? 0.022D : 0.008D;
+        }
+        if (name.equals("DIAMOND_ORE") || name.equals("DEEPSLATE_DIAMOND_ORE")) {
+            return y < -16 ? 0.016D : 0.006D;
+        }
+        if (name.equals("EMERALD_ORE") || name.equals("DEEPSLATE_EMERALD_ORE")) {
+            return y > 80 ? 0.012D : 0.002D;
+        }
+        return 0.0D;
     }
 
     private void placeExposedCluster(Block origin, Material ore, Random random, List<Block> changedBlocks) {
@@ -650,7 +687,7 @@ public final class OreveilWorldGenerationService {
         if (host == Material.NETHERRACK) {
             return ore == Material.NETHER_QUARTZ_ORE || ore == Material.NETHER_GOLD_ORE;
         }
-        if (host == Material.DEEPSLATE) {
+        if (Materials.isDeepslate(host)) {
             return ore.name().startsWith("DEEPSLATE_");
         }
         if (host == Material.STONE) {

@@ -13,6 +13,7 @@ import com.soymods.oreveil.obfuscation.NetworkObfuscationService;
 import com.soymods.oreveil.obfuscation.scan.ChunkObfuscationPrimer;
 import com.soymods.oreveil.obfuscation.transport.TransportMode;
 import com.soymods.oreveil.ui.OreveilAdminGui;
+import com.soymods.oreveil.util.Materials;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import com.soymods.oreveil.world.OreveilWorldGenerationService;
 import java.io.File;
@@ -33,23 +34,23 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class OreveilPlugin extends JavaPlugin {
     private static final DateTimeFormatter CONFIG_BACKUP_SUFFIX = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
-    private static final List<Material> ORE_CANDIDATES = List.of(
+    private static final List<Material> ORE_CANDIDATES = Materials.existing(
         Material.COAL_ORE,
-        Material.DEEPSLATE_COAL_ORE,
-        Material.COPPER_ORE,
-        Material.DEEPSLATE_COPPER_ORE,
+        Materials.DEEPSLATE_COAL_ORE,
+        Materials.COPPER_ORE,
+        Materials.DEEPSLATE_COPPER_ORE,
         Material.IRON_ORE,
-        Material.DEEPSLATE_IRON_ORE,
+        Materials.DEEPSLATE_IRON_ORE,
         Material.GOLD_ORE,
-        Material.DEEPSLATE_GOLD_ORE,
+        Materials.DEEPSLATE_GOLD_ORE,
         Material.REDSTONE_ORE,
-        Material.DEEPSLATE_REDSTONE_ORE,
+        Materials.DEEPSLATE_REDSTONE_ORE,
         Material.EMERALD_ORE,
-        Material.DEEPSLATE_EMERALD_ORE,
+        Materials.DEEPSLATE_EMERALD_ORE,
         Material.LAPIS_ORE,
-        Material.DEEPSLATE_LAPIS_ORE,
+        Materials.DEEPSLATE_LAPIS_ORE,
         Material.DIAMOND_ORE,
-        Material.DEEPSLATE_DIAMOND_ORE,
+        Materials.DEEPSLATE_DIAMOND_ORE,
         Material.NETHER_GOLD_ORE,
         Material.NETHER_QUARTZ_ORE,
         Material.ANCIENT_DEBRIS

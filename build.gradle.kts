@@ -25,6 +25,8 @@ val compatCaves by sourceSets.creating {
     java.srcDir("src/compatCaves/java")
 }
 
+val paper116CompileOnly by configurations.creating
+val paper117CompileOnly by configurations.creating
 val paper118CompileOnly by configurations.creating
 
 repositories {
@@ -35,6 +37,10 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:${property("paper_api_version")}")
     compileOnly("net.dmulloy2:ProtocolLib:5.4.0")
+    paper116CompileOnly("com.destroystokyo.paper:paper-api:1.16.5-R0.1-SNAPSHOT")
+    paper116CompileOnly("net.dmulloy2:ProtocolLib:5.4.0")
+    paper117CompileOnly("io.papermc.paper:paper-api:1.17.1-R0.1-SNAPSHOT")
+    paper117CompileOnly("net.dmulloy2:ProtocolLib:5.4.0")
     paper118CompileOnly("io.papermc.paper:paper-api:1.18.2-R0.1-SNAPSHOT")
     paper118CompileOnly("net.dmulloy2:ProtocolLib:5.4.0")
 
@@ -89,53 +95,89 @@ tasks.named<Jar>("sourcesJar") {
     from(compatCaves.allSource)
 }
 
-val compilePaper118Java by tasks.registering(JavaCompile::class) {
-    description = "Compiles the Paper 1.18 target against the Paper 1.18 API."
+val compilePaper118To1204Java by tasks.registering(JavaCompile::class) {
+    description = "Compiles the Paper 1.18-1.20.4 target against the Paper 1.18 API baseline."
     source(sourceSets.main.get().java, compatCaves.java)
     classpath = paper118CompileOnly
-    destinationDirectory.set(layout.buildDirectory.dir("classes/java/paper118"))
+    destinationDirectory.set(layout.buildDirectory.dir("classes/java/paper118To1204"))
     options.encoding = "UTF-8"
     options.release.set(17)
 }
 
-val processPaper118Resources by tasks.registering(Copy::class) {
-    val props = mapOf(
-        "version" to project.version,
-        "minecraftVersion" to "1.18.2",
-        "apiVersion" to "1.18",
-        "compatAdapterClass" to "com.soymods.oreveil.compat.caves.CavesServerCompatibility",
-    )
-
-    inputs.properties(props)
-    filteringCharset = "UTF-8"
-    from(sourceSets.main.get().resources)
-    into(layout.buildDirectory.dir("resources/paper118"))
-    filesMatching(listOf("plugin.yml", "oreveil-compat.properties")) {
-        expand(props)
-    }
+val compilePaper117Java by tasks.registering(JavaCompile::class) {
+    description = "Compiles the Paper 1.17.x target against the Paper 1.17.1 API."
+    source(sourceSets.main.get().java, compatCaves.java)
+    classpath = paper117CompileOnly
+    destinationDirectory.set(layout.buildDirectory.dir("classes/java/paper117"))
+    options.encoding = "UTF-8"
+    options.release.set(16)
 }
 
-val paper118Jar by tasks.registering(Jar::class) {
-    group = "build"
-    description = "Builds the Paper 1.18 targeted plugin jar."
-    dependsOn(compilePaper118Java, processPaper118Resources)
-    archiveBaseName.set("${project.property("archives_base_name")}-paper-1.18")
-    archiveVersion.set(project.version.toString())
-    from(compilePaper118Java.flatMap { it.destinationDirectory })
-    from(processPaper118Resources)
-    manifest {
-        attributes(
-            "Implementation-Title" to project.name,
-            "Implementation-Version" to project.version,
-            "Oreveil-Compatibility-Adapter" to "caves-1.18",
+val compilePaper116Java by tasks.registering(JavaCompile::class) {
+    description = "Compiles the Paper 1.16.x target against the Paper 1.16.5 API."
+    source(sourceSets.main.get().java, compatCaves.java)
+    classpath = paper116CompileOnly
+    destinationDirectory.set(layout.buildDirectory.dir("classes/java/paper116"))
+    options.encoding = "UTF-8"
+    options.release.set(16)
+}
+
+fun registerCavesJar(targetName: String, supportedVersions: String, apiVersion: String = "1.18"): TaskProvider<Jar> {
+    val resourceTask = tasks.register<Copy>("process${targetName.toTaskSuffix()}Resources") {
+        val props = mapOf(
+            "version" to project.version,
+            "minecraftVersion" to supportedVersions,
+            "apiVersion" to apiVersion,
+            "compatAdapterClass" to "com.soymods.oreveil.compat.caves.CavesServerCompatibility",
         )
+
+        inputs.properties(props)
+        filteringCharset = "UTF-8"
+        from(sourceSets.main.get().resources)
+        into(layout.buildDirectory.dir("resources/${targetName.toTaskSuffix()}"))
+        filesMatching(listOf("plugin.yml", "oreveil-compat.properties")) {
+            expand(props)
+        }
+    }
+
+    return tasks.register<Jar>("${targetName.toTaskSuffix()}Jar") {
+        group = "build"
+        description = "Builds the $targetName targeted plugin jar."
+        val compileTask = when (targetName) {
+            "paper-1.16.x" -> compilePaper116Java
+            "paper-1.17.x" -> compilePaper117Java
+            else -> compilePaper118To1204Java
+        }
+        dependsOn(compileTask, resourceTask)
+        archiveBaseName.set("${project.property("archives_base_name")}-$targetName")
+        archiveVersion.set(project.version.toString())
+        from(compileTask.flatMap { it.destinationDirectory })
+        from(resourceTask)
+        manifest {
+            attributes(
+                "Implementation-Title" to project.name,
+                "Implementation-Version" to project.version,
+                "Oreveil-Compatibility-Adapter" to "caves-1.18",
+                "Oreveil-Supported-Minecraft" to supportedVersions,
+            )
+        }
     }
 }
+
+fun String.toTaskSuffix(): String = split('-', '.')
+    .filter { it.isNotBlank() }
+    .joinToString("") { part -> part.replaceFirstChar { char -> char.uppercase() } }
+
+val paper116xJar = registerCavesJar("paper-1.16.x", "1.16.x", "1.16")
+val paper117xJar = registerCavesJar("paper-1.17.x", "1.17.x", "1.17")
+val paper118xJar = registerCavesJar("paper-1.18.x", "1.18.x")
+val paper119xJar = registerCavesJar("paper-1.19.x", "1.19.x")
+val paper1200To1204Jar = registerCavesJar("paper-1.20.0-1.20.4", "1.20.0-1.20.4")
 
 tasks.register("buildAllTargets") {
     group = "build"
     description = "Builds all Oreveil version-targeted plugin jars."
-    dependsOn(tasks.build, paper118Jar)
+    dependsOn(tasks.build, paper116xJar, paper117xJar, paper118xJar, paper119xJar, paper1200To1204Jar)
 }
 
 publishing {

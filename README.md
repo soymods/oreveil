@@ -205,7 +205,10 @@ cd oreveil
 Artifacts are written to `build/libs/`. Current versioned targets are:
 
 - `oreveil-paper-1.21-<version>.jar`
-- `oreveil-paper-1.18-<version>.jar`
+- `oreveil-paper-1.20.0-1.20.4-<version>.jar`
+- `oreveil-paper-1.19.x-<version>.jar`
+- `oreveil-paper-1.18.x-<version>.jar`
+- `oreveil-paper-1.17.x-<version>.jar`
 
 ### One-Command Dev Server
 
@@ -245,7 +248,7 @@ Useful options:
 - `--reset-world`: delete the disposable `world`, `world_nether`, and `world_the_end` folders before starting.
 - `--no-build`: skip Gradle build and deploy the existing `build/libs/` jar. Run `./gradlew build -q` first if you need fresh code in the jar.
 - `--prepare-only`: download/provision the dev server and deploy the jar, then exit without starting Paper.
-- `PAPER_VERSION=<version>`: run a different Paper/Minecraft version than `gradle.properties`; versions `1.18.x` through `1.20.x` default to `paper-1.18`, while `1.21.x` defaults to `paper-1.21`.
+- `PAPER_VERSION=<version>`: run a different Paper/Minecraft version than `gradle.properties`; versions `1.16.x`, `1.17.x`, `1.18.x`, `1.19.x`, `1.20.0`-`1.20.4`, and `1.21.x` map to matching published jar targets.
 - `PAPER_URL=<url>`: use a specific Paper server jar URL instead of the Paper downloads API.
 - `PROTOCOLLIB_URL=<url>`: override the default ProtocolLib download URL.
 - `OREVEIL_TARGET=<target>`: deploy a specific versioned artifact target instead of inferring it from `PAPER_VERSION`.
@@ -261,7 +264,7 @@ In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joinin
 - `src/main/java/com/soymods/oreveil/obfuscation/`: packet rewrite pipeline
 - `src/main/java/com/soymods/oreveil/compat/`: version-neutral compatibility contracts and adapter loading
 - `src/compatModern/java/`: Paper `1.21.x` compatibility adapter included in the `paper-1.21` jar
-- `src/compatCaves/java/`: Paper `1.18.x` compatibility adapter included in the `paper-1.18` jar
+- `src/compatCaves/java/`: shared compatibility adapter used by the `paper-1.16.x`, `paper-1.17.x`, `paper-1.18.x`, `paper-1.19.x`, and `paper-1.20.0-1.20.4` jars
 - `src/main/java/com/soymods/oreveil/listener/`: world and player event synchronization
 - `src/main/java/com/soymods/oreveil/ui/`: in-game admin GUI
 - `src/main/resources/`: plugin metadata and configuration
@@ -271,11 +274,12 @@ In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joinin
 | Component | Version |
 |-----------|---------|
 | Plugin Version | `0.1.0-SNAPSHOT` |
-| Target Minecraft Version | `1.18.x`, `1.21.x` |
+| Target Minecraft Version | `1.16.x`-`1.20.4`, `1.21.x` |
 | Java | `21+` |
 
 ## Notes
 
-- Oreveil builds separate Paper target jars. The `paper-1.21` jar uses Java 21 bytecode and the `paper-1.18` jar uses Java 17 bytecode.
+- Oreveil builds separate Paper target jars. The `paper-1.21` jar uses Java 21 bytecode; the `paper-1.16.x` and `paper-1.17.x` jars use Java 16 bytecode; the `paper-1.18.x`, `paper-1.19.x`, and `paper-1.20.0-1.20.4` jars use Java 17 bytecode and share the caves-era compatibility adapter.
+- The `paper-1.16.x` jar falls back to pre-Caves-and-Cliffs materials where newer materials such as deepslate, copper, amethyst, and spyglass do not exist.
 - ProtocolLib transport is used automatically when available, depending on `transport.mode`.
 - ProtocolLib chunk packet rewriting is best-effort across `1.21.x`; if the server or ProtocolLib exposes an incompatible chunk packet shape, Oreveil disables that rewrite path for the runtime and keeps the sync fallback active.

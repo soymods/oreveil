@@ -7,8 +7,10 @@ import com.soymods.oreveil.config.OreveilWorldGenerationConfig;
 import com.soymods.oreveil.config.XrayProfile;
 import com.soymods.oreveil.obfuscation.ObfuscationMetrics;
 import com.soymods.oreveil.obfuscation.transport.TransportMode;
+import com.soymods.oreveil.util.Materials;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import com.soymods.oreveil.world.OreveilWorldGenerationService.WorldRegenerationResult;
+import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.util.ArrayList;
@@ -41,7 +43,6 @@ import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
-import org.bukkit.profile.PlayerProfile;
 
 public final class OreveilAdminGui implements Listener {
     private static final TextColor TITLE = TextColor.color(0x7EA7FF);
@@ -52,8 +53,15 @@ public final class OreveilAdminGui implements Listener {
     private static final TextColor ERROR = TextColor.color(0xFF6B6B);
     private static final int MATERIAL_PAGE_SIZE = 45;
     private static final int[] ORE_SLOTS = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32};
-    private static final List<Material> HOST_CHOICES = List.of(Material.STONE, Material.DEEPSLATE, Material.NETHERRACK, Material.END_STONE);
+    private static final List<Material> HOST_CHOICES = Materials.existing(
+        Material.STONE,
+        Materials.DEEPSLATE,
+        Material.NETHERRACK,
+        Material.END_STONE
+    );
     private static final Material SALTED_DISTRIBUTION_ICON = materialOr("ECHO_SHARD", Material.NETHER_STAR);
+    private static final Material XRAY_PROFILE_ICON = materialOr("AMETHYST_SHARD", Material.EMERALD);
+    private static final Material DIAGNOSTICS_ICON = materialOr("SPYGLASS", Material.COMPASS);
     private static final Enchantment ACTIVE_ITEM_ENCHANTMENT = enchantmentOr("UNBREAKING", "DURABILITY");
 
     private final OreveilPlugin plugin;
@@ -154,7 +162,7 @@ public final class OreveilAdminGui implements Listener {
             config.protectedOres().size() + " ore materials protected",
             "Click to choose which ores Oreveil hides."
         ));
-        inventory.setItem(12, item(Material.AMETHYST_SHARD, "Xray Profile", WORLD,
+        inventory.setItem(12, item(XRAY_PROFILE_ICON, "Xray Profile", WORLD,
             "Current: " + config.xrayProfile().displayName(),
             "Click to choose the fake-ore behavior preset."
         ));
@@ -175,7 +183,7 @@ public final class OreveilAdminGui implements Listener {
             config.oreOverridesView().size() + " configured",
             "Choose per-ore host block overrides."
         ));
-        inventory.setItem(21, item(Material.SPYGLASS, "Diagnostics", TITLE,
+        inventory.setItem(21, item(DIAGNOSTICS_ICON, "Diagnostics", TITLE,
             "Packet rewrite counters",
             "Cache and fake-ore index status"
         ));
@@ -361,7 +369,7 @@ public final class OreveilAdminGui implements Listener {
         OreveilConfig config = plugin.oreveilConfig();
         ObfuscationMetrics.Snapshot metrics = plugin.obfuscationService().metricsSnapshot();
         AuthoritativeWorldModel.CacheStats cache = plugin.cacheStats();
-        inventory.setItem(10, item(Material.SPYGLASS, "Transport", TITLE,
+        inventory.setItem(10, item(DIAGNOSTICS_ICON, "Transport", TITLE,
             "Active: " + plugin.obfuscationService().transportName(),
             "Chunk delivery: " + plugin.obfuscationService().handlesChunkDelivery()
         ));
@@ -376,7 +384,7 @@ public final class OreveilAdminGui implements Listener {
             "Salt chunks: " + cache.saltChunks(),
             "Salt blocks: " + cache.saltBlocks()
         ));
-        inventory.setItem(16, item(Material.AMETHYST_SHARD, "Xray Model", WORLD,
+        inventory.setItem(16, item(XRAY_PROFILE_ICON, "Xray Model", WORLD,
             "Profile: " + config.xrayProfile().configName(),
             "Salt budget: " + config.xrayProfile().effectiveSaltBudget(config.saltDensity()),
             "Rare cap: " + config.xrayProfile().maxRareOreBlocks(config.xrayProfile().effectiveSaltBudget(config.saltDensity()))
@@ -790,10 +798,8 @@ public final class OreveilAdminGui implements Listener {
         }
         meta.lore(lines);
         try {
-            PlayerProfile profile = Bukkit.createPlayerProfile(UUID.nameUUIDFromBytes(icon.textureUrl().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-            profile.getTextures().setSkin(URI.create(icon.textureUrl()).toURL());
-            meta.setOwnerProfile(profile);
-        } catch (MalformedURLException | IllegalArgumentException exception) {
+            applyHeadTexture(meta, icon);
+        } catch (ReflectiveOperationException | MalformedURLException | IllegalArgumentException exception) {
             return item(icon.fallback(), name, color, active, lore);
         }
         if (active && ACTIVE_ITEM_ENCHANTMENT != null) {
@@ -802,6 +808,17 @@ public final class OreveilAdminGui implements Listener {
         }
         stack.setItemMeta(meta);
         return stack;
+    }
+
+    private static void applyHeadTexture(SkullMeta meta, HeadIcon icon)
+        throws ReflectiveOperationException, MalformedURLException {
+        Method createProfile = Bukkit.class.getMethod("createPlayerProfile", UUID.class);
+        Object profile = createProfile.invoke(null, UUID.nameUUIDFromBytes(icon.textureUrl().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        Object textures = profile.getClass().getMethod("getTextures").invoke(profile);
+        Method setSkin = textures.getClass().getMethod("setSkin", java.net.URL.class);
+        setSkin.invoke(textures, URI.create(icon.textureUrl()).toURL());
+        Method setOwnerProfile = meta.getClass().getMethod("setOwnerProfile", profile.getClass());
+        setOwnerProfile.invoke(meta, profile);
     }
 
     private static Material materialOr(String preferred, Material fallback) {
@@ -986,7 +1003,7 @@ public final class OreveilAdminGui implements Listener {
     private Material profileIcon(XrayProfile profile) {
         return switch (profile) {
             case VANILLA_FRIENDLY -> Material.EMERALD;
-            case BALANCED -> Material.AMETHYST_SHARD;
+            case BALANCED -> XRAY_PROFILE_ICON;
             case AGGRESSIVE -> Material.REDSTONE;
             case PERFORMANCE -> Material.FEATHER;
         };

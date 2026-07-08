@@ -4,6 +4,7 @@ import com.soymods.oreveil.compat.ServerCompatibility;
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.config.XrayProfile;
 import com.soymods.oreveil.config.XrayProfile.OreRarity;
+import com.soymods.oreveil.util.Materials;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -32,12 +33,12 @@ import org.bukkit.plugin.Plugin;
  */
 public final class AuthoritativeWorldModel {
 
-    private static final EnumSet<Material> SALT_HOSTS = EnumSet.of(
+    private static final Set<Material> SALT_HOSTS = Set.copyOf(Materials.existing(
         Material.STONE,
-        Material.DEEPSLATE,
+        Materials.DEEPSLATE,
         Material.NETHERRACK,
         Material.END_STONE
-    );
+    ));
 
     private final Logger logger;
     private final Plugin plugin;
@@ -78,27 +79,7 @@ public final class AuthoritativeWorldModel {
         int veinMax
     ) {}
 
-    private static final List<SaltOreRule> SALT_ORE_RULES = List.of(
-        new SaltOreRule(Material.COAL_ORE, World.Environment.NORMAL, 0, 192, 24, 5, 13),
-        new SaltOreRule(Material.DEEPSLATE_COAL_ORE, World.Environment.NORMAL, -64, 16, 10, 4, 10),
-        new SaltOreRule(Material.COPPER_ORE, World.Environment.NORMAL, -16, 112, 22, 4, 10),
-        new SaltOreRule(Material.DEEPSLATE_COPPER_ORE, World.Environment.NORMAL, -64, 16, 8, 3, 8),
-        new SaltOreRule(Material.IRON_ORE, World.Environment.NORMAL, -24, 96, 20, 4, 9),
-        new SaltOreRule(Material.DEEPSLATE_IRON_ORE, World.Environment.NORMAL, -64, 16, 14, 3, 8),
-        new SaltOreRule(Material.GOLD_ORE, World.Environment.NORMAL, -64, 32, 8, 2, 7),
-        new SaltOreRule(Material.DEEPSLATE_GOLD_ORE, World.Environment.NORMAL, -64, 16, 8, 2, 7),
-        new SaltOreRule(Material.REDSTONE_ORE, World.Environment.NORMAL, -64, 16, 7, 3, 8),
-        new SaltOreRule(Material.DEEPSLATE_REDSTONE_ORE, World.Environment.NORMAL, -64, 16, 10, 4, 9),
-        new SaltOreRule(Material.LAPIS_ORE, World.Environment.NORMAL, -64, 64, 5, 2, 6),
-        new SaltOreRule(Material.DEEPSLATE_LAPIS_ORE, World.Environment.NORMAL, -64, 16, 6, 2, 6),
-        new SaltOreRule(Material.DIAMOND_ORE, World.Environment.NORMAL, -64, 16, 2, 1, 4),
-        new SaltOreRule(Material.DEEPSLATE_DIAMOND_ORE, World.Environment.NORMAL, -64, 16, 3, 1, 5),
-        new SaltOreRule(Material.EMERALD_ORE, World.Environment.NORMAL, 16, 256, 1, 1, 2),
-        new SaltOreRule(Material.DEEPSLATE_EMERALD_ORE, World.Environment.NORMAL, -64, 16, 1, 1, 2),
-        new SaltOreRule(Material.NETHER_QUARTZ_ORE, World.Environment.NETHER, 10, 118, 28, 5, 14),
-        new SaltOreRule(Material.NETHER_GOLD_ORE, World.Environment.NETHER, 10, 118, 16, 3, 10),
-        new SaltOreRule(Material.ANCIENT_DEBRIS, World.Environment.NETHER, 8, 24, 1, 1, 3)
-    );
+    private static final List<SaltOreRule> SALT_ORE_RULES = saltOreRules();
 
     public AuthoritativeWorldModel(Plugin plugin, Logger logger, OreveilConfig config, ServerCompatibility compatibility) {
         this.plugin = plugin;
@@ -527,27 +508,26 @@ public final class AuthoritativeWorldModel {
         if (isRareSaltOre(material)) {
             return OreRarity.RARE;
         }
-        return switch (material) {
-            case COAL_ORE,
-                DEEPSLATE_COAL_ORE,
-                COPPER_ORE,
-                DEEPSLATE_COPPER_ORE,
-                IRON_ORE,
-                DEEPSLATE_IRON_ORE,
-                NETHER_QUARTZ_ORE -> OreRarity.COMMON;
-            default -> OreRarity.NORMAL;
-        };
+        String name = material.name();
+        if (name.equals("COAL_ORE")
+            || name.equals("DEEPSLATE_COAL_ORE")
+            || name.equals("COPPER_ORE")
+            || name.equals("DEEPSLATE_COPPER_ORE")
+            || name.equals("IRON_ORE")
+            || name.equals("DEEPSLATE_IRON_ORE")
+            || name.equals("NETHER_QUARTZ_ORE")) {
+            return OreRarity.COMMON;
+        }
+        return OreRarity.NORMAL;
     }
 
     private static boolean isRareSaltOre(Material material) {
-        return switch (material) {
-            case DIAMOND_ORE,
-                DEEPSLATE_DIAMOND_ORE,
-                EMERALD_ORE,
-                DEEPSLATE_EMERALD_ORE,
-                ANCIENT_DEBRIS -> true;
-            default -> false;
-        };
+        String name = material.name();
+        return name.equals("DIAMOND_ORE")
+            || name.equals("DEEPSLATE_DIAMOND_ORE")
+            || name.equals("EMERALD_ORE")
+            || name.equals("DEEPSLATE_EMERALD_ORE")
+            || name.equals("ANCIENT_DEBRIS");
     }
 
     private static int countRareSaltBlocks(Map<Integer, Material> salt) {
@@ -562,12 +542,52 @@ public final class AuthoritativeWorldModel {
 
     private static boolean matchesHost(Material ore, Material host) {
         String name = ore.name();
-        return switch (host) {
-            case DEEPSLATE -> name.startsWith("DEEPSLATE_");
-            case NETHERRACK -> name.startsWith("NETHER_") || name.equals("ANCIENT_DEBRIS");
-            case END_STONE -> !name.startsWith("DEEPSLATE_") && !name.startsWith("NETHER_") && !name.equals("ANCIENT_DEBRIS");
-            default -> !name.startsWith("DEEPSLATE_") && !name.startsWith("NETHER_") && !name.equals("ANCIENT_DEBRIS");
-        };
+        if (Materials.isDeepslate(host)) {
+            return name.startsWith("DEEPSLATE_");
+        }
+        if (host == Material.NETHERRACK) {
+            return name.startsWith("NETHER_") || name.equals("ANCIENT_DEBRIS");
+        }
+        return !name.startsWith("DEEPSLATE_") && !name.startsWith("NETHER_") && !name.equals("ANCIENT_DEBRIS");
+    }
+
+    private static List<SaltOreRule> saltOreRules() {
+        List<SaltOreRule> rules = new ArrayList<>();
+        addSaltRule(rules, Material.COAL_ORE, World.Environment.NORMAL, 0, 192, 24, 5, 13);
+        addSaltRule(rules, Materials.DEEPSLATE_COAL_ORE, World.Environment.NORMAL, -64, 16, 10, 4, 10);
+        addSaltRule(rules, Materials.COPPER_ORE, World.Environment.NORMAL, -16, 112, 22, 4, 10);
+        addSaltRule(rules, Materials.DEEPSLATE_COPPER_ORE, World.Environment.NORMAL, -64, 16, 8, 3, 8);
+        addSaltRule(rules, Material.IRON_ORE, World.Environment.NORMAL, -24, 96, 20, 4, 9);
+        addSaltRule(rules, Materials.DEEPSLATE_IRON_ORE, World.Environment.NORMAL, -64, 16, 14, 3, 8);
+        addSaltRule(rules, Material.GOLD_ORE, World.Environment.NORMAL, -64, 32, 8, 2, 7);
+        addSaltRule(rules, Materials.DEEPSLATE_GOLD_ORE, World.Environment.NORMAL, -64, 16, 8, 2, 7);
+        addSaltRule(rules, Material.REDSTONE_ORE, World.Environment.NORMAL, -64, 16, 7, 3, 8);
+        addSaltRule(rules, Materials.DEEPSLATE_REDSTONE_ORE, World.Environment.NORMAL, -64, 16, 10, 4, 9);
+        addSaltRule(rules, Material.LAPIS_ORE, World.Environment.NORMAL, -64, 64, 5, 2, 6);
+        addSaltRule(rules, Materials.DEEPSLATE_LAPIS_ORE, World.Environment.NORMAL, -64, 16, 6, 2, 6);
+        addSaltRule(rules, Material.DIAMOND_ORE, World.Environment.NORMAL, -64, 16, 2, 1, 4);
+        addSaltRule(rules, Materials.DEEPSLATE_DIAMOND_ORE, World.Environment.NORMAL, -64, 16, 3, 1, 5);
+        addSaltRule(rules, Material.EMERALD_ORE, World.Environment.NORMAL, 16, 256, 1, 1, 2);
+        addSaltRule(rules, Materials.DEEPSLATE_EMERALD_ORE, World.Environment.NORMAL, -64, 16, 1, 1, 2);
+        addSaltRule(rules, Material.NETHER_QUARTZ_ORE, World.Environment.NETHER, 10, 118, 28, 5, 14);
+        addSaltRule(rules, Material.NETHER_GOLD_ORE, World.Environment.NETHER, 10, 118, 16, 3, 10);
+        addSaltRule(rules, Material.ANCIENT_DEBRIS, World.Environment.NETHER, 8, 24, 1, 1, 3);
+        return List.copyOf(rules);
+    }
+
+    private static void addSaltRule(
+        List<SaltOreRule> rules,
+        Material material,
+        World.Environment environment,
+        int minY,
+        int maxY,
+        int weight,
+        int veinMin,
+        int veinMax
+    ) {
+        if (material != null) {
+            rules.add(new SaltOreRule(material, environment, minY, maxY, weight, veinMin, veinMax));
+        }
     }
 
     // -------------------------------------------------------------------------

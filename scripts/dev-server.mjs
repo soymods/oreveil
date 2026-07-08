@@ -13,7 +13,7 @@ const props = readProperties(join(root, "gradle.properties"));
 const minecraftVersion = process.env.PAPER_VERSION ?? props.minecraft_version ?? "1.21";
 const archivesBaseName = props.archives_base_name ?? "oreveil";
 const pluginVersion = props.plugin_version ?? "0.1.0-SNAPSHOT";
-const targetName = process.env.OREVEIL_TARGET ?? targetForMinecraftVersion(minecraftVersion);
+const targetName = normalizeTarget(process.env.OREVEIL_TARGET ?? targetForMinecraftVersion(minecraftVersion));
 const buildTask = buildTaskForTarget(targetName);
 let serverPort = process.env.SERVER_PORT ?? "25565";
 const serverDir = join(root, "build", "dev-server", safePathSegment(minecraftVersion));
@@ -115,10 +115,11 @@ async function writeServerFiles() {
   await writeFile(join(serverDir, "eula.txt"), "eula=true\n");
   await writeFile(join(serverDir, "server.properties"), [
     `server-port=${serverPort}`,
-    "motd=Oreveil dev server",
+    `motd=Oreveil ${minecraftVersion} ${targetName} on ${serverPort}`,
     "online-mode=false",
     "white-list=false",
     "spawn-protection=0",
+    `query.port=${serverPort}`,
     "gamemode=creative",
     "difficulty=peaceful",
     "view-distance=8",
@@ -265,22 +266,60 @@ function readProperties(path) {
 }
 
 function targetForMinecraftVersion(version) {
-  const match = /^(\d+)\.(\d+)/.exec(version);
+  const match = /^(\d+)\.(\d+)(?:\.(\d+))?/.exec(version);
   if (!match) {
     return "paper-1.21";
   }
 
   const major = Number(match[1]);
   const minor = Number(match[2]);
-  if (major === 1 && minor >= 18 && minor < 21) {
-    return "paper-1.18";
+  const patch = match[3] == null ? 0 : Number(match[3]);
+  if (major === 1 && minor === 16) {
+    return "paper-1.16.x";
+  }
+  if (major === 1 && minor === 17) {
+    return "paper-1.17.x";
+  }
+  if (major === 1 && minor === 18) {
+    return "paper-1.18.x";
+  }
+  if (major === 1 && minor === 19) {
+    return "paper-1.19.x";
+  }
+  if (major === 1 && minor === 20 && patch <= 4) {
+    return "paper-1.20.0-1.20.4";
+  }
+  if (major === 1 && minor === 20) {
+    throw new Error(`No Oreveil target is defined for Minecraft ${version}. Supported 1.20 versions are 1.20.0 through 1.20.4.`);
   }
   return "paper-1.21";
 }
 
-function buildTaskForTarget(target) {
+function normalizeTarget(target) {
+  if (target === "paper-1.16") {
+    return "paper-1.16.x";
+  }
   if (target === "paper-1.18") {
-    return "paper118Jar";
+    return "paper-1.18.x";
+  }
+  return target;
+}
+
+function buildTaskForTarget(target) {
+  if (target === "paper-1.16.x") {
+    return "Paper116XJar";
+  }
+  if (target === "paper-1.17.x") {
+    return "Paper117XJar";
+  }
+  if (target === "paper-1.18.x") {
+    return "Paper118XJar";
+  }
+  if (target === "paper-1.19.x") {
+    return "Paper119XJar";
+  }
+  if (target === "paper-1.20.0-1.20.4") {
+    return "Paper12001204Jar";
   }
   if (target === "paper-1.21") {
     return "jar";
