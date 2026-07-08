@@ -13,6 +13,7 @@ import com.soymods.oreveil.world.OreveilWorldGenerationService.WorldRegeneration
 import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URI;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -63,6 +64,8 @@ public final class OreveilAdminGui implements Listener {
     private static final Material XRAY_PROFILE_ICON = materialOr("AMETHYST_SHARD", Material.EMERALD);
     private static final Material DIAGNOSTICS_ICON = materialOr("SPYGLASS", Material.COMPASS);
     private static final Enchantment ACTIVE_ITEM_ENCHANTMENT = enchantmentOr("UNBREAKING", "DURABILITY");
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final String DEFAULT_MANAGED_WORLD = "oreveil";
 
     private final OreveilPlugin plugin;
     private final ServerCompatibility compatibility;
@@ -421,7 +424,7 @@ public final class OreveilAdminGui implements Listener {
         inventory.setItem(10, item(Material.MAP, "Target World", WORLD,
             world.targetWorldName(),
             "Oreveil creates/regenerates this world.",
-            "Use /oreveil world target <name>."
+            "Click to enter a world name."
         ));
         inventory.setItem(11, item(Material.WRITABLE_BOOK, "Create World Flow", TITLE,
             "Click Create Managed World.",
@@ -432,6 +435,14 @@ public final class OreveilAdminGui implements Listener {
         inventory.setItem(12, toggle(Material.CHEST, "Backup On Regenerate", world.backupOnRegenerate(),
             "Move the old world folder aside",
             "before creating a replacement."
+        ));
+        inventory.setItem(13, item(Material.NAME_TAG, "Use Default Target", CONTROLS,
+            "Set the managed world target to " + DEFAULT_MANAGED_WORLD + "."
+        ));
+        inventory.setItem(14, item(Material.NETHER_STAR, "Generate Private Secret", ORES,
+            world.generationSecret() == 0L ? "Current: missing" : "Current: set",
+            "Generate a new private remix secret.",
+            "Changing it affects future generated chunks."
         ));
         inventory.setItem(16, item(Material.ENDER_PEARL, "Teleport", WORLD,
             "Teleport to " + world.targetWorldName() + ".",
@@ -711,7 +722,18 @@ public final class OreveilAdminGui implements Listener {
 
     private void handleWorld(Player player, int slot) {
         switch (slot) {
+            case 10 -> {
+                openSignInput(player, PendingSignInput.text(
+                    "world-generation.target-world",
+                    "Target World",
+                    plugin.oreveilConfig().worldGeneration().targetWorldName(),
+                    Screen.WORLD
+                ));
+                return;
+            }
             case 12 -> plugin.toggleBooleanSetting("world-generation.backup-on-regenerate");
+            case 13 -> plugin.setStringSetting("world-generation.target-world", DEFAULT_MANAGED_WORLD);
+            case 14 -> plugin.setNullableLongSetting("world-generation.secret", nonZeroRandomLong());
             case 16 -> {
                 teleportManaged(player);
                 return;
@@ -774,9 +796,20 @@ public final class OreveilAdminGui implements Listener {
     }
 
     private void enableManagedWorldGenerationForGuiAction() {
+        if (plugin.oreveilConfig().worldGeneration().generationSecret() == 0L) {
+            plugin.setNullableLongSetting("world-generation.secret", nonZeroRandomLong());
+        }
         if (!plugin.oreveilConfig().worldGeneration().enabled()) {
             plugin.setBooleanSetting("world-generation.enabled", true);
         }
+    }
+
+    private long nonZeroRandomLong() {
+        long value;
+        do {
+            value = SECURE_RANDOM.nextLong();
+        } while (value == 0L);
+        return value;
     }
 
     private void numericRow(Inventory inventory, int startSlot, String title, Material icon, int value, int step) {

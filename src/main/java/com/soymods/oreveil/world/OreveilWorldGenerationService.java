@@ -29,22 +29,26 @@ import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.HeightMap;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
 public final class OreveilWorldGenerationService {
     private static final DateTimeFormatter BACKUP_SUFFIX = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
     private static final int CHUNKS_PER_TICK = 2;
+    private static final int GENERATION_PASS_VERSION = 1;
 
     private final Plugin plugin;
     private final Logger logger;
     private final ServerCompatibility compatibility;
+    private final NamespacedKey generationMarkerKey;
     private final Queue<QueuedChunk> queuedChunks = new ArrayDeque<>();
     private final Set<QueuedChunk> queuedChunkSet = new HashSet<>();
     private OreveilConfig config;
@@ -57,6 +61,7 @@ public final class OreveilWorldGenerationService {
         this.logger = logger;
         this.config = config;
         this.compatibility = compatibility;
+        this.generationMarkerKey = new NamespacedKey(plugin, "managed_generation_pass");
     }
 
     public void reload(OreveilConfig config) {
@@ -120,6 +125,9 @@ public final class OreveilWorldGenerationService {
         if (!shouldMutateNewChunks(chunk.getWorld())) {
             return;
         }
+        if (hasAppliedGenerationPass(chunk)) {
+            return;
+        }
 
         List<Block> changedBlocks = new ArrayList<>();
         OreveilWorldGenerationConfig settings = settings();
@@ -137,6 +145,27 @@ public final class OreveilWorldGenerationService {
         if (!changedBlocks.isEmpty() && mutationSync != null) {
             mutationSync.accept(changedBlocks);
         }
+        markGenerationPassApplied(chunk);
+    }
+
+    public boolean hasAppliedGenerationPass(Chunk chunk) {
+        Integer version = chunk.getPersistentDataContainer().get(generationMarkerKey, PersistentDataType.INTEGER);
+        return version != null && version >= GENERATION_PASS_VERSION;
+    }
+
+    public String describeGenerationPassState(Chunk chunk) {
+        if (!isManagedWorld(chunk.getWorld())) {
+            return "not managed";
+        }
+        Integer version = chunk.getPersistentDataContainer().get(generationMarkerKey, PersistentDataType.INTEGER);
+        if (version == null) {
+            return "pending";
+        }
+        return version >= GENERATION_PASS_VERSION ? "applied v" + version : "old v" + version;
+    }
+
+    private void markGenerationPassApplied(Chunk chunk) {
+        chunk.getPersistentDataContainer().set(generationMarkerKey, PersistentDataType.INTEGER, GENERATION_PASS_VERSION);
     }
 
     public void createManagedWorldAsync(Long seedOverride, int preloadRadius, WorldOperationListener listener) {
@@ -499,7 +528,7 @@ public final class OreveilWorldGenerationService {
         operationRunning.set(false);
     }
 
-    private String validateWorldName(String worldName) {
+    public String validateWorldName(String worldName) {
         if (worldName == null || worldName.isBlank()) {
             return "World name cannot be blank.";
         }

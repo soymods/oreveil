@@ -37,3 +37,4 @@ This rule set keeps reveal semantics explicit and config-driven while leaving ro
 - Managed-world ore remixing uses `world-generation.secret` in addition to the world seed, chunk coordinates, and mutation pass name.
 - Server owners should set `world-generation.secret` to a private random long before enabling `world-generation.enabled`.
 - Public seed knowledge is not enough to predict Oreveil's managed-world ore remix layer when the generation secret is private.
+- Oreveil writes a persistent generation-pass marker to each managed chunk after mutation, so already-processed chunks are not remixed again on later loads or reloads.

@@ -318,6 +318,13 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             sender,
             "Status",
             STATUS,
+            Component.text("Generation pass: ", BASE)
+                .append(highlight(plugin.worldGenerationService().describeGenerationPassState(block.getChunk()), STATUS))
+        );
+        sendMessage(
+            sender,
+            "Status",
+            STATUS,
             Component.text("Exposure reasons: ", BASE)
                 .append(highlight(reasons.isEmpty() ? "none" : String.join("; ", reasons), reasons.isEmpty() ? MUTED : STATUS))
         );
