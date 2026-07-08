@@ -250,9 +250,10 @@ Useful options:
 - `--prepare-only`: download/provision the dev server and deploy the jar, then exit without starting Paper.
 - `PAPER_VERSION=<version>`: run a different Paper/Minecraft version than `gradle.properties`; versions `1.16.x`, `1.17.x`, `1.18.x`, `1.19.x`, `1.20.0`-`1.20.4`, and `1.21.x` map to matching published jar targets.
 - `PAPER_URL=<url>`: use a specific Paper server jar URL instead of the Paper downloads API.
-- `PROTOCOLLIB_URL=<url>`: override the default ProtocolLib download URL.
+- `PROTOCOLLIB_URL=<url>`: override the default ProtocolLib download URL. By default the dev script uses ProtocolLib `4.8.0` for `1.16.x`/`1.17.x` and `5.4.0` for newer targets.
 - `OREVEIL_TARGET=<target>`: deploy a specific versioned artifact target instead of inferring it from `PAPER_VERSION`.
 - `SERVER_PORT=<port>`: write a specific dev server port; when omitted, the script starts at `25565` and picks the next available port.
+- `JAVA_BIN=<path>` or `JAVA16_HOME`/`JAVA17_HOME`/`JAVA21_HOME`: choose the Java runtime used to start Paper. The script auto-selects Java 16 for `1.16.x`/`1.17.x`, Java 17 for `1.18.x`-`1.20.4`, and Java 21 for `1.21.x` when those runtimes are discoverable.
 
 In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joining and moving around. For chunk-packet testing, confirm that chunk rewrite packet/entry counters increase and failures stay at `0`.
 
@@ -279,7 +280,7 @@ In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joinin
 
 ## Notes
 
-- Oreveil builds separate Paper target jars. The `paper-1.21` jar uses Java 21 bytecode; the `paper-1.16.x` and `paper-1.17.x` jars use Java 16 bytecode; the `paper-1.18.x`, `paper-1.19.x`, and `paper-1.20.0-1.20.4` jars use Java 17 bytecode and share the caves-era compatibility adapter.
+- Oreveil builds separate Paper target jars. The `paper-1.21` jar uses Java 21 bytecode; the `paper-1.16.x` and `paper-1.17.x` jars use Java 16 bytecode; the `paper-1.18.x`, `paper-1.19.x`, and `paper-1.20.0-1.20.4` jars use Java 17 bytecode and share the caves-era compatibility adapter. Paper `1.16.x` must be started with Java 16 because the Paper patcher rejects Java 21.
 - The `paper-1.16.x` jar falls back to pre-Caves-and-Cliffs materials where newer materials such as deepslate, copper, amethyst, and spyglass do not exist.
 - ProtocolLib transport is used automatically when available, depending on `transport.mode`.
 - ProtocolLib chunk packet rewriting is best-effort across `1.21.x`; if the server or ProtocolLib exposes an incompatible chunk packet shape, Oreveil disables that rewrite path for the runtime and keeps the sync fallback active.

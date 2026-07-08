@@ -6,7 +6,7 @@ import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { get } from "node:https";
 import { createServer } from "node:net";
 import { basename, join, resolve } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
 const props = readProperties(join(root, "gradle.properties"));
@@ -20,6 +20,7 @@ const serverDir = join(root, "build", "dev-server", safePathSegment(minecraftVer
 const pluginsDir = join(serverDir, "plugins");
 const paperJar = join(serverDir, "paper.jar");
 const protocolLibJar = join(pluginsDir, "ProtocolLib.jar");
+const protocolLibMarker = join(pluginsDir, ".ProtocolLib.version");
 const pluginJar = join(root, "build", "libs", `${archivesBaseName}-${targetName}-${pluginVersion}.jar`);
 const deployedPluginJar = join(pluginsDir, `${archivesBaseName}.jar`);
 
@@ -28,28 +29,39 @@ const watchMode = args.has("--watch") || args.has("watch");
 const noBuild = args.has("--no-build");
 const resetWorld = args.has("--reset-world");
 const prepareOnly = args.has("--prepare-only");
+let serverJava = null;
 let serverProcess = null;
 let restarting = false;
 let restartTimer = null;
 let stdinWired = false;
 
-await selectServerPort();
-await prepareServer();
-if (resetWorld) {
-  resetWorldFolders();
-}
-await buildAndDeploy();
-if (prepareOnly) {
-  console.log(`Prepared dev server in ${serverDir}`);
-  process.exit(0);
-}
-if (watchMode) {
-  watchSources();
-}
-startServer();
+main().catch((error) => {
+  console.error(error.message);
+  process.exit(1);
+});
 
-process.on("SIGINT", () => stopAndExit());
-process.on("SIGTERM", () => stopAndExit());
+async function main() {
+  if (!prepareOnly) {
+    serverJava = selectJavaRuntime(targetName);
+  }
+  await selectServerPort();
+  await prepareServer();
+  if (resetWorld) {
+    resetWorldFolders();
+  }
+  await buildAndDeploy();
+  if (prepareOnly) {
+    console.log(`Prepared dev server in ${serverDir}`);
+    return;
+  }
+  if (watchMode) {
+    watchSources();
+  }
+  startServer();
+
+  process.on("SIGINT", () => stopAndExit());
+  process.on("SIGTERM", () => stopAndExit());
+}
 
 async function prepareServer() {
   await mkdir(pluginsDir, { recursive: true });
@@ -102,13 +114,15 @@ async function ensurePaper() {
 }
 
 async function ensureProtocolLib() {
-  if (existsSync(protocolLibJar)) {
+  const protocolLib = protocolLibForTarget(targetName);
+  if (existsSync(protocolLibJar) && existsSync(protocolLibMarker) && (await readFile(protocolLibMarker, "utf8")).trim() === protocolLib.version) {
     return;
   }
 
-  const url = process.env.PROTOCOLLIB_URL ?? "https://github.com/dmulloy2/ProtocolLib/releases/download/5.4.0/ProtocolLib.jar";
-  console.log("Downloading ProtocolLib...");
+  const url = process.env.PROTOCOLLIB_URL ?? protocolLib.url;
+  console.log(`Downloading ProtocolLib ${protocolLib.version}...`);
   await downloadFile(url, protocolLibJar);
+  await writeFile(protocolLibMarker, protocolLib.version);
 }
 
 async function writeServerFiles() {
@@ -143,8 +157,8 @@ async function writeServerFiles() {
 }
 
 function startServer() {
-  console.log(`Starting Paper ${minecraftVersion} dev server with Oreveil target ${targetName}. Join localhost:${serverPort}.`);
-  serverProcess = spawn("java", ["-Xms1G", "-Xmx2G", "-jar", "paper.jar", "nogui"], {
+  console.log(`Starting Paper ${minecraftVersion} dev server with Oreveil target ${targetName} using Java ${serverJava.major}. Join localhost:${serverPort}.`);
+  serverProcess = spawn(serverJava.bin, ["-Xms1G", "-Xmx2G", "-jar", "paper.jar", "nogui"], {
     cwd: serverDir,
     stdio: ["pipe", "inherit", "inherit"],
   });
@@ -325,6 +339,112 @@ function buildTaskForTarget(target) {
     return "jar";
   }
   return "buildAllTargets";
+}
+
+function protocolLibForTarget(target) {
+  if (target === "paper-1.16.x" || target === "paper-1.17.x") {
+    return {
+      version: "4.8.0",
+      url: "https://github.com/dmulloy2/ProtocolLib/releases/download/4.8.0/ProtocolLib.jar",
+    };
+  }
+  return {
+    version: "5.4.0",
+    url: "https://github.com/dmulloy2/ProtocolLib/releases/download/5.4.0/ProtocolLib.jar",
+  };
+}
+
+function selectJavaRuntime(target) {
+  const required = requiredJavaMajorForTarget(target);
+  if (required == null) {
+    return { bin: process.env.JAVA_BIN ?? "java", major: "default" };
+  }
+
+  const candidates = javaCandidates(required);
+  const checked = [];
+  for (const candidate of candidates) {
+    const major = javaMajor(candidate.bin);
+    if (major == null) {
+      continue;
+    }
+    checked.push(`${candidate.label}: Java ${major}`);
+    if (major === required) {
+      return { bin: candidate.bin, major };
+    }
+  }
+
+  const details = checked.length > 0 ? ` Checked: ${checked.join(", ")}.` : "";
+  throw new Error(
+    `Oreveil target ${target} needs Java ${required} to run its Paper dev server.`
+      + ` Set JAVA_BIN to a Java ${required} executable, or set JAVA${required}_HOME/JAVA_${required}_HOME.`
+      + details
+  );
+}
+
+function requiredJavaMajorForTarget(target) {
+  if (target === "paper-1.16.x" || target === "paper-1.17.x") {
+    return 16;
+  }
+  if (target === "paper-1.18.x" || target === "paper-1.19.x" || target === "paper-1.20.0-1.20.4") {
+    return 17;
+  }
+  if (target === "paper-1.21") {
+    return 21;
+  }
+  return null;
+}
+
+function javaCandidates(required) {
+  const candidates = [];
+  addJavaCandidate(candidates, process.env.JAVA_BIN, "JAVA_BIN");
+  addJavaHomeCandidate(candidates, process.env[`JAVA${required}_HOME`], `JAVA${required}_HOME`);
+  addJavaHomeCandidate(candidates, process.env[`JAVA_${required}_HOME`], `JAVA_${required}_HOME`);
+  addJavaHomeCandidate(candidates, process.env[`JAVA_HOME_${required}`], `JAVA_HOME_${required}`);
+  addJavaHomeCandidate(candidates, process.env.JAVA_HOME, "JAVA_HOME");
+  addJavaHomeCandidate(candidates, macJavaHome(required), `/usr/libexec/java_home -v ${required}`);
+  addJavaCandidate(candidates, "java", "PATH java");
+  return candidates;
+}
+
+function addJavaHomeCandidate(candidates, home, label) {
+  if (home) {
+    addJavaCandidate(candidates, join(home.trim(), "bin", "java"), label);
+  }
+}
+
+function addJavaCandidate(candidates, bin, label) {
+  if (!bin) {
+    return;
+  }
+  if (candidates.some((candidate) => candidate.bin === bin)) {
+    return;
+  }
+  candidates.push({ bin, label });
+}
+
+function macJavaHome(required) {
+  const result = spawnSync("/usr/libexec/java_home", ["-v", String(required)], { encoding: "utf8" });
+  if (result.status !== 0) {
+    return null;
+  }
+  return result.stdout.trim();
+}
+
+function javaMajor(bin) {
+  const result = spawnSync(bin, ["-version"], { encoding: "utf8" });
+  if (result.status !== 0) {
+    return null;
+  }
+  const output = `${result.stdout}\n${result.stderr}`;
+  const match = /version "([^"]+)"/.exec(output);
+  if (!match) {
+    return null;
+  }
+  const version = match[1];
+  if (version.startsWith("1.")) {
+    return Number(version.split(".")[1]);
+  }
+  return Number(version.split(".")[0]);
 }
 
 function safePathSegment(value) {

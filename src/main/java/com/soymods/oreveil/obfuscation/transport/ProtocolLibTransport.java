@@ -68,6 +68,9 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
         this.protocolManager = ProtocolLibrary.getProtocolManager();
         this.chunkPacketRewriteDisabled = false;
         fallback.start(config, materialResolver);
+        if (!supportsLevelChunkDataAccess()) {
+            disableChunkPacketRewrite("ProtocolLib does not expose MAP_CHUNK buffer access on this version.");
+        }
         registerPacketListener();
         logger.info("ProtocolLib transport selected. Rewriting outbound block updates and priming chunk delivery.");
     }
@@ -293,8 +296,17 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
                 packet.getLevelChunkData().write(0, chunkData);
                 metrics.recordChunkPacketRewrite(result.rewrittenEntries());
             }
-        } catch (RuntimeException exception) {
+        } catch (LinkageError | RuntimeException exception) {
             disableChunkPacketRewrite("Runtime packet access failed: " + exception.getMessage());
+        }
+    }
+
+    private boolean supportsLevelChunkDataAccess() {
+        try {
+            PacketContainer.class.getMethod("getLevelChunkData");
+            return true;
+        } catch (NoSuchMethodException exception) {
+            return false;
         }
     }
 
@@ -340,6 +352,13 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
     }
 
     private void primeChunkToPlayer(Player player, Chunk chunk) {
+        for (Block block : worldModel.getProtectedOreBlocksInChunk(chunk)) {
+            Material visibleMaterial = materialResolver.apply(block, player);
+            if (visibleMaterial != block.getType()) {
+                fallback.syncBlockToPlayer(player, block, (b, p) -> visibleMaterial);
+                metrics.recordChunkPrimeCorrection();
+            }
+        }
         for (Block block : worldModel.getSaltBlocksInChunk(chunk)) {
             Material visibleMaterial = materialResolver.apply(block, player);
             fallback.syncBlockToPlayer(player, block, (b, p) -> visibleMaterial);
