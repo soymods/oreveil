@@ -340,13 +340,26 @@ public final class AuthoritativeWorldModel {
         }
         refreshExposure(block);
         for (BlockFace face : CARDINAL_FACES) {
-            refreshExposure(block.getRelative(face));
+            refreshExposureIfLoaded(block, face);
         }
     }
 
     /** Refreshes exposure state without invalidating an unchanged fake-salt host block. */
     public void refreshExposureState(Block block) {
         refreshExposure(block);
+    }
+
+    private void refreshExposureIfLoaded(Block block, BlockFace face) {
+        World world = block.getWorld();
+        int x = block.getX() + face.getModX();
+        int y = block.getY() + face.getModY();
+        int z = block.getZ() + face.getModZ();
+        if (y < compatibility.minBuildHeight(world)
+            || y >= compatibility.maxBuildHeight(world)
+            || !world.isChunkLoaded(x >> 4, z >> 4)) {
+            return;
+        }
+        refreshExposure(world.getBlockAt(x, y, z));
     }
 
     // -------------------------------------------------------------------------

@@ -610,9 +610,11 @@ public final class OreveilWorldGenerationService {
                     Material type = block.getType();
                     Material host = relocationHost(type);
                     if (host != null) {
-                        ores.add(new RelocatedOre(type, bucket(host, y)));
+                        HostBucket hostBucket = bucket(host, y);
+                        ores.add(new RelocatedOre(type, hostBucket, block));
                         block.setType(host, false);
                         changedBlocks.add(block);
+                        destinations.computeIfAbsent(hostBucket, ignored -> new ArrayList<>()).add(block);
                     } else if (isOreHost(type)) {
                         destinations.computeIfAbsent(bucket(type, y), ignored -> new ArrayList<>()).add(block);
                     }
@@ -628,16 +630,28 @@ public final class OreveilWorldGenerationService {
         for (RelocatedOre ore : ores) {
             List<Block> candidates = destinations.get(ore.bucket());
             if (candidates == null || candidates.isEmpty()) {
-                logger.warning(
-                    "Could not relocate " + ore.material() + " in managed chunk "
-                        + chunk.getX() + "," + chunk.getZ() + "; the original ore was removed."
-                );
+                ore.source().setType(ore.material(), false);
+                changedBlocks.add(ore.source());
                 continue;
             }
-            Block destination = candidates.remove(candidates.size() - 1);
+            Block destination = takeRelocationDestination(candidates, ore.source());
             destination.setType(ore.material(), false);
             changedBlocks.add(destination);
         }
+    }
+
+    private Block takeRelocationDestination(List<Block> candidates, Block source) {
+        if (candidates.size() == 1) {
+            return candidates.remove(0);
+        }
+        for (int index = candidates.size() - 1; index >= 0; index--) {
+            Block candidate = candidates.get(index);
+            if (!candidate.equals(source)) {
+                candidates.remove(index);
+                return candidate;
+            }
+        }
+        return candidates.remove(candidates.size() - 1);
     }
 
     private HostBucket bucket(Material host, int y) {
@@ -986,6 +1000,6 @@ public final class OreveilWorldGenerationService {
     private record HostBucket(Material host, int sectionY) {
     }
 
-    private record RelocatedOre(Material material, HostBucket bucket) {
+    private record RelocatedOre(Material material, HostBucket bucket, Block source) {
     }
 }
