@@ -7,10 +7,14 @@ import com.soymods.oreveil.util.Materials;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
@@ -46,7 +50,8 @@ import org.bukkit.scheduler.BukkitTask;
 public final class OreveilWorldGenerationService {
     private static final DateTimeFormatter BACKUP_SUFFIX = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
     private static final int CHUNKS_PER_TICK = 2;
-    private static final int GENERATION_PASS_VERSION = 2;
+    private static final int RELOCATION_REGION_RADIUS = 1;
+    private static final int GENERATION_PASS_VERSION = 3;
 
     private final Plugin plugin;
     private final Logger logger;
@@ -134,20 +139,49 @@ public final class OreveilWorldGenerationService {
 
         List<Block> changedBlocks = new ArrayList<>();
         OreveilWorldGenerationConfig settings = settings();
-        if (settings.oreRemixAttemptsPerChunk() > 0) {
-            mutateOreDistribution(chunk, settings, changedBlocks);
-            seedExposedOre(chunk, settings, changedBlocks);
+        List<Chunk> mutationRegion = loadedMutationRegion(chunk);
+        for (Chunk regionChunk : mutationRegion) {
+            if (settings.oreRemixAttemptsPerChunk() > 0) {
+                mutateOreDistribution(regionChunk, settings, changedBlocks);
+                seedExposedOre(regionChunk, settings, changedBlocks);
+            }
         }
-        relocateVanillaOres(chunk, changedBlocks);
+        relocateVanillaOres(mutationRegion, changedBlocks);
         if (settings.ruinFragmentChance() > 0.0D) {
-            placeRuinFragment(chunk, settings, changedBlocks);
+            for (Chunk regionChunk : mutationRegion) {
+                placeRuinFragment(regionChunk, settings, changedBlocks);
+            }
         }
 
         if (!changedBlocks.isEmpty() && mutationSync != null) {
             List<Block> completedChanges = List.copyOf(changedBlocks);
             Bukkit.getScheduler().runTask(plugin, () -> mutationSync.accept(completedChanges));
         }
-        markGenerationPassApplied(chunk);
+        for (Chunk regionChunk : mutationRegion) {
+            markGenerationPassApplied(regionChunk);
+        }
+    }
+
+    private List<Chunk> loadedMutationRegion(Chunk center) {
+        List<Chunk> chunks = new ArrayList<>();
+        World world = center.getWorld();
+        for (int dx = -RELOCATION_REGION_RADIUS; dx <= RELOCATION_REGION_RADIUS; dx++) {
+            for (int dz = -RELOCATION_REGION_RADIUS; dz <= RELOCATION_REGION_RADIUS; dz++) {
+                int chunkX = center.getX() + dx;
+                int chunkZ = center.getZ() + dz;
+                if (!world.isChunkLoaded(chunkX, chunkZ)) {
+                    continue;
+                }
+                Chunk chunk = world.getChunkAt(chunkX, chunkZ);
+                if (!hasAppliedGenerationPass(chunk)) {
+                    chunks.add(chunk);
+                }
+            }
+        }
+        if (chunks.isEmpty()) {
+            chunks.add(center);
+        }
+        return chunks;
     }
 
     public boolean hasAppliedGenerationPass(Chunk chunk) {
@@ -590,30 +624,35 @@ public final class OreveilWorldGenerationService {
 
     }
 
-    private void relocateVanillaOres(Chunk chunk, List<Block> changedBlocks) {
-        Random random = seededRandom(chunk, "vanilla-ore-relocation-v2");
-        World world = chunk.getWorld();
-        int minY = compatibility.minBuildHeight(world);
-        int maxY = compatibility.maxBuildHeight(world);
-        int baseX = chunk.getX() << 4;
-        int baseZ = chunk.getZ() << 4;
+    private void relocateVanillaOres(List<Chunk> chunks, List<Block> changedBlocks) {
+        if (chunks.isEmpty()) {
+            return;
+        }
+        Random random = seededRandom(chunks.get(0), "vanilla-ore-relocation-v3");
         Map<HostBucket, List<Block>> destinations = new HashMap<>();
         List<RelocatedOre> ores = new ArrayList<>();
 
-        for (int x = baseX; x < baseX + 16; x++) {
-            for (int z = baseZ; z < baseZ + 16; z++) {
-                for (int y = minY; y < maxY; y++) {
-                    Block block = world.getBlockAt(x, y, z);
-                    Material type = block.getType();
-                    Material host = relocationHost(type);
-                    if (host != null) {
-                        HostBucket hostBucket = bucket(host, y);
-                        ores.add(new RelocatedOre(type, hostBucket, block));
-                        block.setType(host, false);
-                        changedBlocks.add(block);
-                        destinations.computeIfAbsent(hostBucket, ignored -> new ArrayList<>()).add(block);
-                    } else if (isOreHost(type)) {
-                        destinations.computeIfAbsent(bucket(type, y), ignored -> new ArrayList<>()).add(block);
+        for (Chunk chunk : chunks) {
+            World world = chunk.getWorld();
+            int minY = compatibility.minBuildHeight(world);
+            int maxY = compatibility.maxBuildHeight(world);
+            int baseX = chunk.getX() << 4;
+            int baseZ = chunk.getZ() << 4;
+            for (int x = baseX; x < baseX + 16; x++) {
+                for (int z = baseZ; z < baseZ + 16; z++) {
+                    for (int y = minY; y < maxY; y++) {
+                        Block block = world.getBlockAt(x, y, z);
+                        Material type = block.getType();
+                        Material host = relocationHost(type);
+                        if (host != null) {
+                            HostBucket hostBucket = bucket(host, y);
+                            ores.add(new RelocatedOre(type, hostBucket, block));
+                            block.setType(host, false);
+                            changedBlocks.add(block);
+                            destinations.computeIfAbsent(hostBucket, ignored -> new ArrayList<>()).add(block);
+                        } else if (isOreHost(type)) {
+                            destinations.computeIfAbsent(bucket(type, y), ignored -> new ArrayList<>()).add(block);
+                        }
                     }
                 }
             }
@@ -952,13 +991,25 @@ public final class OreveilWorldGenerationService {
     }
 
     private Random seededRandom(Chunk chunk, String salt) {
-        long seed = chunk.getWorld().getSeed();
-        long mixed = seed
-            ^ ((long) chunk.getX() * 341873128712L)
-            ^ ((long) chunk.getZ() * 132897987541L)
-            ^ Long.rotateLeft(settings().generationSecret(), 23)
-            ^ salt.toLowerCase(Locale.ROOT).hashCode();
-        return new Random(mixed);
+        return new Random(deterministicSeed(chunk, salt));
+    }
+
+    private long deterministicSeed(Chunk chunk, String salt) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] saltBytes = salt.toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8);
+            ByteBuffer input = ByteBuffer.allocate(Long.BYTES * 2 + Integer.BYTES * 3 + saltBytes.length);
+            input.putLong(settings().generationSecret());
+            input.putLong(chunk.getWorld().getSeed());
+            input.putInt(chunk.getX());
+            input.putInt(chunk.getZ());
+            input.putInt(saltBytes.length);
+            input.put(saltBytes);
+            byte[] hash = digest.digest(input.array());
+            return ByteBuffer.wrap(hash).getLong();
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is required for managed ore seed derivation.", exception);
+        }
     }
 
     public record WorldRegenerationResult(boolean success, String message, World world, long seed) {

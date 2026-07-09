@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -36,6 +37,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class OreveilPlugin extends JavaPlugin {
     private static final int BSTATS_PLUGIN_ID = 32491;
     private static final DateTimeFormatter CONFIG_BACKUP_SUFFIX = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+    private static final SecureRandom SECRET_RANDOM = new SecureRandom();
     private static final List<Material> ORE_CANDIDATES = Materials.existing(
         Material.COAL_ORE,
         Materials.DEEPSLATE_COAL_ORE,
@@ -71,6 +73,7 @@ public final class OreveilPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        ensurePrivateSecrets();
         this.metrics = new Metrics(this, BSTATS_PLUGIN_ID);
 
         this.configLoader = new OreveilConfigLoader(getLogger());
@@ -107,6 +110,33 @@ public final class OreveilPlugin extends JavaPlugin {
         getLogger().info("Oreveil enabled with " + oreveilConfig.protectedOres().size() + " protected ore materials.");
     }
 
+    private void ensurePrivateSecrets() {
+        boolean changed = false;
+        if (getConfig().getLong("world-model.salt-secret", 0L) == 0L) {
+            long secret = nextNonZeroSecret();
+            getConfig().set("world-model.salt-secret", secret);
+            getLogger().info("Generated private world-model.salt-secret for salted fake ore placement.");
+            changed = true;
+        }
+        if (getConfig().getLong("world-generation.secret", 0L) == 0L) {
+            long secret = nextNonZeroSecret();
+            getConfig().set("world-generation.secret", secret);
+            getLogger().info("Generated private world-generation.secret for managed ore remixing.");
+            changed = true;
+        }
+        if (changed) {
+            saveConfig();
+        }
+    }
+
+    private static long nextNonZeroSecret() {
+        long secret;
+        do {
+            secret = SECRET_RANDOM.nextLong();
+        } while (secret == 0L);
+        return secret;
+    }
+
     @Override
     public void onDisable() {
         if (metrics != null) {
@@ -129,10 +159,12 @@ public final class OreveilPlugin extends JavaPlugin {
 
     public OreveilConfig reloadOreveilConfig() {
         reloadConfig();
+        ensurePrivateSecrets();
         return applyOreveilConfig(configLoader.load(getConfig()));
     }
 
     private OreveilConfig applyCurrentOreveilConfig() {
+        ensurePrivateSecrets();
         return applyOreveilConfig(configLoader.load(getConfig()));
     }
 
