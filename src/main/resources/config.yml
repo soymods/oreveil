@@ -70,6 +70,7 @@ world-generation:
   # Additional secret-seeded ore attempts. Original vanilla ores are always
   # relocated when managed generation is enabled, even when this is zero.
   ore-remix-attempts-per-chunk: 28
+  # Reserved for a future terrain pass. Leave at 0 in current releases.
   terrain-adjustment-attempts-per-chunk: 0
   ruin-fragment-chance: 0.0
 

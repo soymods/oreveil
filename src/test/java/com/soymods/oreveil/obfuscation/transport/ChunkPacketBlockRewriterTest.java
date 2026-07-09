@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.config.XrayProfile;
 import java.io.ByteArrayOutputStream;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -216,7 +217,7 @@ final class ChunkPacketBlockRewriterTest {
         );
 
         byte[] output = result.bytes();
-        byte[] trailing = java.util.Arrays.copyOfRange(output, output.length - 4, output.length);
+        byte[] trailing = Arrays.copyOfRange(output, output.length - 4, output.length);
         assertArrayEquals(new byte[] {9, 8, 7, 6}, trailing);
     }
 
@@ -375,7 +376,7 @@ final class ChunkPacketBlockRewriterTest {
             int value = reader.readVarInt();
             reader.readVarInt();
             int[] values = new int[size];
-            java.util.Arrays.fill(values, value);
+            Arrays.fill(values, value);
             return values;
         }
 
@@ -406,7 +407,7 @@ final class ChunkPacketBlockRewriterTest {
 
     private static int[] filled(int value, int size) {
         int[] values = new int[size];
-        java.util.Arrays.fill(values, value);
+        Arrays.fill(values, value);
         return values;
     }
 

@@ -3,6 +3,7 @@ package com.soymods.oreveil.listener;
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.obfuscation.NetworkObfuscationService;
 import com.soymods.oreveil.obfuscation.scan.ChunkObfuscationPrimer;
+import java.util.function.Supplier;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -22,13 +23,13 @@ public final class OreveilPlayerListener implements Listener {
     private final Plugin plugin;
     private final ChunkObfuscationPrimer primer;
     private final NetworkObfuscationService obfuscationService;
-    private final java.util.function.Supplier<OreveilConfig> configSupplier;
+    private final Supplier<OreveilConfig> configSupplier;
 
     public OreveilPlayerListener(
         Plugin plugin,
         ChunkObfuscationPrimer primer,
         NetworkObfuscationService obfuscationService,
-        java.util.function.Supplier<OreveilConfig> configSupplier
+        Supplier<OreveilConfig> configSupplier
     ) {
         this.plugin = plugin;
         this.primer = primer;

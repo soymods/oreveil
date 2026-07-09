@@ -17,6 +17,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Stream;
 import net.kyori.adventure.text.Component;
@@ -1547,7 +1548,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
     private void runWorldOperation(
         CommandSender sender,
         String initialMessage,
-        java.util.function.Consumer<OreveilWorldGenerationService.WorldOperationListener> operation
+        Consumer<OreveilWorldGenerationService.WorldOperationListener> operation
     ) {
         WorldProgressFeedback feedback = new WorldProgressFeedback(sender);
         feedback.stage(initialMessage + "...");
@@ -2130,7 +2131,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             2,
             List.of("4", "8", "12"),
             List.of(),
-            "Number of managed-world terrain adjustment attempts per chunk.",
+            "Reserved setting for future managed-world terrain adjustment.",
             config -> config.worldGeneration().terrainAdjustmentAttemptsPerChunk()
         ),
         RUIN_FRAGMENT_CHANCE(

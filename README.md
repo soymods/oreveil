@@ -6,7 +6,7 @@
 [![Paper](https://img.shields.io/badge/Paper-Server%20Plugin-FFFFFF?style=for-the-badge&logo=papermc&logoColor=black)](https://papermc.io)
 [![Java](https://img.shields.io/badge/Java-Universal%20Jar-FF6B6B?style=for-the-badge&logo=openjdk)](https://openjdk.org)
 
-Deterministic server-side ore obfuscation and seed-resilient world integrity for Minecraft servers.
+Deterministic server-side ore obfuscation and private-seed ore placement for Minecraft servers.
 
 Created by `soymods`.
 
@@ -14,17 +14,17 @@ Created by `soymods`.
 
 ## What Oreveil Is
 
-Oreveil is a server-side Minecraft plugin that reduces x-ray and seed-assisted resource discovery by keeping hidden ore state server-authoritative and rewriting the client view before players can legitimately expose it.
+Oreveil is a server-side Minecraft plugin for blocking x-ray value and seed-assisted ore hunting. It keeps hidden ore state server-authoritative and sends players a cleaned client view until normal gameplay exposes the ore.
 
-Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server authoritative and rewrites block updates before they reach players. Hidden ores are replaced with contextually valid host blocks such as stone, deepslate, or netherrack until normal gameplay legitimately exposes them. With ProtocolLib, cached hidden ore and salt positions are also rewritten in outgoing chunk data before delivery when the server runtime exposes compatible block-state IDs. On runtimes where full chunk rewriting is unavailable, Oreveil falls back to chunk priming plus block update synchronization.
+Instead of trusting the client to ignore hidden blocks, Oreveil replaces hidden ores with contextually valid host blocks such as stone, deepslate, or netherrack until they are legitimately exposed. With ProtocolLib on compatible runtimes, cached hidden ore and salt positions are rewritten in outgoing chunk data before delivery. On runtimes where full chunk rewriting is unavailable, Oreveil uses chunk priming and block update synchronization to keep the client view aligned.
 
 ## Core Model
 
-### Packet-Level Obfuscation
+### Packet-Aware Obfuscation
 
 - Intercept outgoing chunk and block update traffic.
 - Rewrite hidden ore states per-player before transmission.
-- Prevent transient packet leakage on compatible chunk-rewrite runtimes and reduce stale-client value through chunk priming on fallback runtimes.
+- Rewrite full chunk payloads on compatible ProtocolLib runtimes, with a sync fallback for runtimes that do not expose a compatible chunk format.
 
 ### Exposure-Gated Reveal Rules
 
@@ -32,9 +32,9 @@ Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server
 - Avoid proximity-based disclosure and similar side channels.
 - Preserve vanilla-consistent behavior for ordinary mining and exploration.
 
-### Seed-Resilient Authority
+### Private-Seed Ore Placement
 
-- Maintain a server-authoritative record of protected ore positions.
+- Maintain a server-side record of protected ore positions.
 - Support salted or non-vanilla ore placement strategies using a server-private salt so fake ore signals do not derive from the public world seed alone.
 - Support managed-world ore remixing with a separate server-private generation secret, so regenerated worlds are not predictable from the public seed alone.
 - Relocate every vanilla ore in managed chunks using a private server secret while preserving its host family and 16-block vertical band.
@@ -59,7 +59,7 @@ Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server
 
 - React to mining, explosions, fluids, pistons, placement, teleportation, and player movement.
 - Keep the client view aligned with current reveal state as the world changes.
-- Prime newly viewed areas so players do not gain value from stale underground information.
+- Prime newly viewed areas so fallback runtimes stay synchronized as chunks load.
 
 ### Packet-Aware Transport
 
@@ -70,7 +70,7 @@ Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server
 
 ## Threat Model
 
-Oreveil is intended to neutralize or materially weaken:
+Oreveil is built to counter:
 
 - classic x-ray clients
 - resource pack transparency exploits
@@ -78,7 +78,7 @@ Oreveil is intended to neutralize or materially weaken:
 - seed-cracking workflows that rely on predictable underground distribution
 - packet leakage from naive server-side reveal implementations
 
-The goal is to reduce adversarial clients back to standard survival constraints rather than trying to detect every cheat directly.
+The goal is to control what an untrusted client can learn from hidden ore state rather than trying to detect every cheat directly.
 
 ## Administration
 

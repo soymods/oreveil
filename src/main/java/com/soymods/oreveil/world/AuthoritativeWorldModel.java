@@ -6,8 +6,10 @@ import com.soymods.oreveil.config.XrayProfile;
 import com.soymods.oreveil.config.XrayProfile.OreRarity;
 import com.soymods.oreveil.util.Materials;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -301,7 +303,7 @@ public final class AuthoritativeWorldModel {
         }
 
         int cachedSaltBlocks = 0;
-        Map<Material, Integer> saltByType = new java.util.EnumMap<>(Material.class);
+        Map<Material, Integer> saltByType = new EnumMap<>(Material.class);
         for (Map<Integer, Material> salt : saltCache.values()) {
             cachedSaltBlocks += salt.size();
             for (Material material : salt.values()) {
@@ -638,7 +640,7 @@ public final class AuthoritativeWorldModel {
         int baseX = chunk.getX() << 4;
         int baseZ = chunk.getZ() << 4;
         Map<Integer, Material> ores = new HashMap<>();
-        Set<Integer> exposed = new java.util.HashSet<>();
+        Set<Integer> exposed = new HashSet<>();
 
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
@@ -662,7 +664,7 @@ public final class AuthoritativeWorldModel {
     private void refreshExposure(Block block) {
         ChunkKey key = keyOf(block.getChunk());
         int packed = packLocal(block.getX() & 0xF, block.getY(), block.getZ() & 0xF);
-        Set<Integer> exposed = exposedProtectedOreCache.computeIfAbsent(key, ignored -> new java.util.HashSet<>());
+        Set<Integer> exposed = exposedProtectedOreCache.computeIfAbsent(key, ignored -> new HashSet<>());
         if (isProtectedOre(block.getType()) && isExposed(block)) {
             exposed.add(packed);
         } else {

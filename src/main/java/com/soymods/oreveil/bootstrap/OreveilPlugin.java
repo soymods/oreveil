@@ -239,7 +239,7 @@ public final class OreveilPlugin extends JavaPlugin {
     }
 
     public List<Material> candidateOreMaterials() {
-        List<Material> ores = new java.util.ArrayList<>(ORE_CANDIDATES);
+        List<Material> ores = new ArrayList<>(ORE_CANDIDATES);
         ores.sort(Comparator.comparing(Enum::name));
         return ores;
     }

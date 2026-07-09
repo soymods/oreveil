@@ -19,8 +19,10 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Consumer;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
@@ -1089,7 +1091,7 @@ public final class OreveilAdminGui implements Listener {
         feedback(player, "Teleporting to " + world.getName() + ".");
     }
 
-    private void runWorldOperation(Player player, java.util.function.Consumer<OreveilWorldOperationFeedback> operation) {
+    private void runWorldOperation(Player player, Consumer<OreveilWorldOperationFeedback> operation) {
         player.closeInventory();
         OreveilWorldOperationFeedback feedback = new OreveilWorldOperationFeedback(player);
         operation.accept(feedback);
@@ -1173,7 +1175,7 @@ public final class OreveilAdminGui implements Listener {
     }
 
     private String displayMaterial(Material material) {
-        String lower = material.name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
+        String lower = material.name().toLowerCase(Locale.ROOT).replace('_', ' ');
         StringBuilder result = new StringBuilder();
         boolean capitalize = true;
         for (char c : lower.toCharArray()) {

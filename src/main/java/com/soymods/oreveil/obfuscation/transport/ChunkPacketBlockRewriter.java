@@ -7,6 +7,7 @@ import com.soymods.oreveil.obfuscation.HostBlockResolver;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -284,7 +285,7 @@ final class ChunkPacketBlockRewriter {
         int[] expand(int size, int directBits) {
             if (bits == 0) {
                 int[] values = new int[size];
-                java.util.Arrays.fill(values, singleValue);
+                Arrays.fill(values, singleValue);
                 return values;
             }
 

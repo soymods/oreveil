@@ -9,8 +9,8 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
@@ -139,9 +139,6 @@ public final class OreveilWorldGenerationService {
             seedExposedOre(chunk, settings, changedBlocks);
         }
         relocateVanillaOres(chunk, changedBlocks);
-        if (settings.terrainAdjustmentAttemptsPerChunk() > 0) {
-            mutateSurfaceTerrain(chunk, settings, changedBlocks);
-        }
         if (settings.ruinFragmentChance() > 0.0D) {
             placeRuinFragment(chunk, settings, changedBlocks);
         }
@@ -474,7 +471,7 @@ public final class OreveilWorldGenerationService {
         int chunkRadius = Math.max(0, radius);
         int spawnChunkX = world.getSpawnLocation().getBlockX() >> 4;
         int spawnChunkZ = world.getSpawnLocation().getBlockZ() >> 4;
-        List<int[]> chunks = new java.util.ArrayList<>();
+        List<int[]> chunks = new ArrayList<>();
         for (int dx = -chunkRadius; dx <= chunkRadius; dx++) {
             for (int dz = -chunkRadius; dz <= chunkRadius; dz++) {
                 chunks.add(new int[] {spawnChunkX + dx, spawnChunkZ + dz});
@@ -791,18 +788,6 @@ public final class OreveilWorldGenerationService {
 
     private Material pick(Material preferred, Material fallback) {
         return preferred == null ? fallback : preferred;
-    }
-
-    private void mutateSurfaceTerrain(Chunk chunk, OreveilWorldGenerationConfig settings, List<Block> changedBlocks) {
-        // Intentionally subtle: leave this as a no-op placeholder until terrain tweaks
-        // are cluster-based instead of random single-block edits.
-    }
-
-    private boolean isSurfaceMutable(Material material) {
-        return switch (material) {
-            case GRASS_BLOCK, DIRT, COARSE_DIRT, PODZOL, STONE, ANDESITE, DIORITE, GRANITE, SAND, RED_SAND, GRAVEL -> true;
-            default -> false;
-        };
     }
 
     private Material surfaceCapFor(Material material) {
