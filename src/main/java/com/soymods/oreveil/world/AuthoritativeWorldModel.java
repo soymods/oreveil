@@ -119,6 +119,10 @@ public final class AuthoritativeWorldModel {
         );
     }
 
+    public void updateConfig(OreveilConfig newConfig) {
+        this.config = newConfig;
+    }
+
     public boolean isProtectedOre(Material material) {
         return config.protectedOres().contains(material);
     }

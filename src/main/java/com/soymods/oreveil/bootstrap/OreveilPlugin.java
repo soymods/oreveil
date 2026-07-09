@@ -121,24 +121,62 @@ public final class OreveilPlugin extends JavaPlugin {
 
     public OreveilConfig reloadOreveilConfig() {
         reloadConfig();
-        this.oreveilConfig = configLoader.load(getConfig());
+        return applyOreveilConfig(configLoader.load(getConfig()));
+    }
 
-        // Drain salt before clearing so we can send clients back the real block for removed entries
-        List<Block> formerSalt = worldModel.collectAllSaltBlocks();
+    private OreveilConfig applyCurrentOreveilConfig() {
+        return applyOreveilConfig(configLoader.load(getConfig()));
+    }
 
-        this.worldModel.reload(oreveilConfig);
-        this.exposureService.reload(oreveilConfig);
-        this.obfuscationService.reload(oreveilConfig);
-        this.worldGenerationService.reload(oreveilConfig);
+    private OreveilConfig applyOreveilConfig(OreveilConfig newConfig) {
+        OreveilConfig previousConfig = this.oreveilConfig;
+        boolean rebuildWorldModel = requiresWorldModelRebuild(previousConfig, newConfig);
+        boolean resyncVisibility = requiresVisibilityResync(previousConfig, newConfig);
+        this.oreveilConfig = newConfig;
 
-        // Sync real ores (handles protect/unprotect toggling)
-        this.obfuscationService.resyncAllPlayers(Set.copyOf(ORE_CANDIDATES));
-        // Reveal former salt positions that are no longer in the cache
-        this.obfuscationService.resyncBlocks(formerSalt);
-        // Push new salt positions to clients
-        this.obfuscationService.resyncNewSaltBlocks();
+        List<Block> formerSalt = rebuildWorldModel ? worldModel.collectAllSaltBlocks() : List.of();
 
-        return oreveilConfig;
+        if (rebuildWorldModel) {
+            this.worldModel.reload(newConfig);
+        } else {
+            this.worldModel.updateConfig(newConfig);
+        }
+        this.exposureService.reload(newConfig);
+        this.obfuscationService.reload(newConfig);
+        this.worldGenerationService.reload(newConfig);
+
+        if (resyncVisibility) {
+            this.obfuscationService.resyncAllPlayers(Set.copyOf(ORE_CANDIDATES));
+            this.obfuscationService.resyncBlocks(formerSalt);
+            if (rebuildWorldModel) {
+                this.obfuscationService.resyncNewSaltBlocks();
+            }
+        }
+
+        return newConfig;
+    }
+
+    private static boolean requiresWorldModelRebuild(OreveilConfig oldConfig, OreveilConfig newConfig) {
+        return oldConfig == null
+            || oldConfig.saltedDistributionEnabled() != newConfig.saltedDistributionEnabled()
+            || oldConfig.saltDensity() != newConfig.saltDensity()
+            || oldConfig.saltSecret() != newConfig.saltSecret()
+            || oldConfig.xrayProfile() != newConfig.xrayProfile()
+            || !oldConfig.protectedOres().equals(newConfig.protectedOres())
+            || oldConfig.revealNextToNonOccludingBlocks() != newConfig.revealNextToNonOccludingBlocks()
+            || !oldConfig.revealAdjacentMaterials().equals(newConfig.revealAdjacentMaterials())
+            || !oldConfig.revealTransparentMaterials().equals(newConfig.revealTransparentMaterials());
+    }
+
+    private static boolean requiresVisibilityResync(OreveilConfig oldConfig, OreveilConfig newConfig) {
+        return oldConfig == null
+            || requiresWorldModelRebuild(oldConfig, newConfig)
+            || oldConfig.obfuscationEnabled() != newConfig.obfuscationEnabled()
+            || oldConfig.revealOnExposure() != newConfig.revealOnExposure()
+            || oldConfig.exposedOreRevealChunkRadius() != newConfig.exposedOreRevealChunkRadius()
+            || !oldConfig.transportMode().equalsIgnoreCase(newConfig.transportMode())
+            || !oldConfig.dimensionDefaults().equals(newConfig.dimensionDefaults())
+            || !oldConfig.oreOverrides().equals(newConfig.oreOverrides());
     }
 
     public OreveilConfig resetOreveilConfigToDefaults() {
@@ -211,7 +249,7 @@ public final class OreveilPlugin extends JavaPlugin {
         values.sort(String::compareToIgnoreCase);
         getConfig().set(path, values);
         saveConfig();
-        return reloadOreveilConfig();
+        return applyCurrentOreveilConfig();
     }
 
     public OreveilConfig setMaterialListEntry(String path, Material material, boolean enabled) {
@@ -224,61 +262,61 @@ public final class OreveilPlugin extends JavaPlugin {
         values.sort(String::compareToIgnoreCase);
         getConfig().set(path, values);
         saveConfig();
-        return reloadOreveilConfig();
+        return applyCurrentOreveilConfig();
     }
 
     public OreveilConfig setConfigMapEntry(String path, String key, String value) {
         getConfig().set(path + "." + key, value);
         saveConfig();
-        return reloadOreveilConfig();
+        return applyCurrentOreveilConfig();
     }
 
     public OreveilConfig clearConfigMapEntry(String path, String key) {
         getConfig().set(path + "." + key, null);
         saveConfig();
-        return reloadOreveilConfig();
+        return applyCurrentOreveilConfig();
     }
 
     public OreveilConfig toggleBooleanSetting(String path) {
         getConfig().set(path, !getConfig().getBoolean(path, false));
         saveConfig();
-        return reloadOreveilConfig();
+        return applyCurrentOreveilConfig();
     }
 
     public OreveilConfig setBooleanSetting(String path, boolean value) {
         getConfig().set(path, value);
         saveConfig();
-        return reloadOreveilConfig();
+        return applyCurrentOreveilConfig();
     }
 
     public OreveilConfig setIntegerSetting(String path, int value) {
         getConfig().set(path, value);
         saveConfig();
-        return reloadOreveilConfig();
+        return applyCurrentOreveilConfig();
     }
 
     public OreveilConfig setDoubleSetting(String path, double value) {
         getConfig().set(path, value);
         saveConfig();
-        return reloadOreveilConfig();
+        return applyCurrentOreveilConfig();
     }
 
     public OreveilConfig setTransportMode(TransportMode mode) {
         getConfig().set("transport.mode", mode.name());
         saveConfig();
-        return reloadOreveilConfig();
+        return applyCurrentOreveilConfig();
     }
 
     public OreveilConfig setStringSetting(String path, String value) {
         getConfig().set(path, value);
         saveConfig();
-        return reloadOreveilConfig();
+        return applyCurrentOreveilConfig();
     }
 
     public OreveilConfig setNullableLongSetting(String path, Long value) {
         getConfig().set(path, value);
         saveConfig();
-        return reloadOreveilConfig();
+        return applyCurrentOreveilConfig();
     }
 
     private void registerCommands() {
