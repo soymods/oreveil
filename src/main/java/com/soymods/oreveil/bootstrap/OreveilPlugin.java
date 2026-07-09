@@ -9,6 +9,7 @@ import com.soymods.oreveil.exposure.ExposureService;
 import com.soymods.oreveil.listener.OreveilPlayerListener;
 import com.soymods.oreveil.listener.OreveilWorldGenerationListener;
 import com.soymods.oreveil.listener.OreveilWorldListener;
+import com.soymods.oreveil.metrics.Metrics;
 import com.soymods.oreveil.obfuscation.NetworkObfuscationService;
 import com.soymods.oreveil.obfuscation.scan.ChunkObfuscationPrimer;
 import com.soymods.oreveil.obfuscation.transport.TransportMode;
@@ -33,6 +34,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class OreveilPlugin extends JavaPlugin {
+    private static final int BSTATS_PLUGIN_ID = 32491;
     private static final DateTimeFormatter CONFIG_BACKUP_SUFFIX = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
     private static final List<Material> ORE_CANDIDATES = Materials.existing(
         Material.COAL_ORE,
@@ -64,10 +66,12 @@ public final class OreveilPlugin extends JavaPlugin {
     private OreveilWorldGenerationService worldGenerationService;
     private OreveilAdminGui adminGui;
     private ServerCompatibility compatibility;
+    private Metrics metrics;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        this.metrics = new Metrics(this, BSTATS_PLUGIN_ID);
 
         this.configLoader = new OreveilConfigLoader(getLogger());
         this.oreveilConfig = configLoader.load(getConfig());
@@ -105,6 +109,10 @@ public final class OreveilPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (metrics != null) {
+            metrics.shutdown();
+            metrics = null;
+        }
         if (obfuscationService != null) {
             obfuscationService.stop();
         }
