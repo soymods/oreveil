@@ -14,9 +14,9 @@ Created by `soymods`.
 
 ## What Oreveil Is
 
-Oreveil is a server-side Minecraft plugin that prevents x-ray and seed-assisted resource discovery by ensuring unrevealed ore data is never sent to the client in the first place.
+Oreveil is a server-side Minecraft plugin that reduces x-ray and seed-assisted resource discovery by keeping hidden ore state server-authoritative and rewriting the client view before players can legitimately expose it.
 
-Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server authoritative and rewrites block updates before they reach players. Hidden ores are replaced with contextually valid host blocks such as stone, deepslate, or netherrack until normal gameplay legitimately exposes them. With ProtocolLib, cached hidden ore and salt positions are also rewritten in outgoing chunk data before delivery when the server runtime exposes compatible block-state IDs.
+Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server authoritative and rewrites block updates before they reach players. Hidden ores are replaced with contextually valid host blocks such as stone, deepslate, or netherrack until normal gameplay legitimately exposes them. With ProtocolLib, cached hidden ore and salt positions are also rewritten in outgoing chunk data before delivery when the server runtime exposes compatible block-state IDs. On runtimes where full chunk rewriting is unavailable, Oreveil falls back to chunk priming plus block update synchronization.
 
 ## Core Model
 
@@ -24,7 +24,7 @@ Instead of trusting the client to ignore hidden blocks, Oreveil keeps the server
 
 - Intercept outgoing chunk and block update traffic.
 - Rewrite hidden ore states per-player before transmission.
-- Prevent transient packet leakage that traditional x-ray tools depend on.
+- Prevent transient packet leakage on compatible chunk-rewrite runtimes and reduce stale-client value through chunk priming on fallback runtimes.
 
 ### Exposure-Gated Reveal Rules
 
@@ -182,6 +182,14 @@ Managed world tools:
 - The server's required Java runtime still depends on its Paper version: Java 16 for `1.16.x`/`1.17.x`, Java 17+ for `1.18.x`-`1.20.4`, Java 21+ for `1.20.5`-`1.21.x`, and Java 25+ for `26.x`.
 - Integrates with ProtocolLib when installed. Runtime-incompatible chunk packet rewriting disables itself and falls back to chunk priming plus block update sync; `26.x` currently uses that fallback path for full chunk delivery.
 
+## Known Limitations
+
+- Chunk packet rewriting is best-effort and depends on the packet shape exposed by the active Paper/ProtocolLib/runtime combination.
+- The fallback transport does not rewrite full chunk payloads. It primes loaded chunks from Oreveil's protected-ore cache and keeps block updates synchronized, but it is not equivalent to compatible packet-level chunk rewriting.
+- `26.x` currently uses the fallback path for full chunk delivery.
+- Release confidence requires manual smoke testing with a matching Minecraft client on each supported Paper boundary listed in [`RELEASE_GATE.md`](RELEASE_GATE.md).
+- Seed-resilient placement requires private, non-zero `world-model.salt-secret` and `world-generation.secret` values when those features are enabled.
+
 ## Release Readiness
 
 Use [`RELEASE_GATE.md`](RELEASE_GATE.md) before promoting a build.
@@ -272,7 +280,7 @@ In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joinin
 
 | Component | Version |
 |-----------|---------|
-| Plugin Version | `0.1.1` |
+| Plugin Version | `0.1.2` |
 | Target Minecraft Version | `1.16.x`-`1.21.x`, `26.x` |
 | Plugin bytecode | Java 16 |
 

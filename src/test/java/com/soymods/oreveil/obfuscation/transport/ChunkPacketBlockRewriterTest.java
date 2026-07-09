@@ -120,6 +120,61 @@ final class ChunkPacketBlockRewriterTest {
     }
 
     @Test
+    void unchangedWhenReplacementStateIdsCannotBeResolved() {
+        ChunkPacketBlockRewriter rewriter = rewriter(
+            Map.of(pack(1, 4, 2), Material.DIAMOND_ORE),
+            Map.of(),
+            material -> null
+        );
+        byte[] input = chunkBuffer(filled(DIAMOND_ORE));
+
+        ChunkPacketBlockRewriter.RewriteResult result = rewriter.rewrite(
+            input,
+            WORLD_ID,
+            World.Environment.NORMAL,
+            0,
+            0,
+            0,
+            16,
+            config()
+        );
+
+        assertFalse(result.changed());
+        assertFalse(result.failed());
+    }
+
+    @Test
+    void rewritesOnlyEntriesInMatchingVerticalSection() {
+        ChunkPacketBlockRewriter rewriter = rewriter(
+            Map.of(
+                pack(1, 4, 2), Material.DIAMOND_ORE,
+                pack(3, 20, 5), Material.DIAMOND_ORE
+            ),
+            Map.of()
+        );
+        int[] lowerSection = filled(STONE);
+        int[] upperSection = filled(STONE);
+        lowerSection[index(1, 4, 2)] = DIAMOND_ORE;
+        upperSection[index(3, 20, 5)] = DIAMOND_ORE;
+
+        ChunkPacketBlockRewriter.RewriteResult result = rewriter.rewrite(
+            chunkBuffer(new int[][] {lowerSection, upperSection}),
+            WORLD_ID,
+            World.Environment.NORMAL,
+            0,
+            0,
+            0,
+            32,
+            config()
+        );
+
+        assertTrue(result.changed());
+        assertEquals(2, result.rewrittenEntries());
+        assertEquals(STONE, readSectionBlockStates(result.bytes(), 0)[index(1, 4, 2)]);
+        assertEquals(STONE, readSectionBlockStates(result.bytes(), 1)[index(3, 20, 5)]);
+    }
+
+    @Test
     void returnsFailureForMalformedChunkBuffer() {
         ChunkPacketBlockRewriter rewriter = rewriter(
             Map.of(pack(1, 4, 2), Material.DIAMOND_ORE),
@@ -166,6 +221,21 @@ final class ChunkPacketBlockRewriterTest {
     }
 
     private static ChunkPacketBlockRewriter rewriter(Map<Integer, Material> ores, Map<Integer, Material> salt) {
+        return rewriter(ores, salt, material -> switch (material) {
+            case STONE -> STONE;
+            case DIAMOND_ORE -> DIAMOND_ORE;
+            case DEEPSLATE_DIAMOND_ORE -> DEEPSLATE_DIAMOND_ORE;
+            case DEEPSLATE -> DEEPSLATE;
+            case GOLD_ORE -> FAKE_GOLD;
+            default -> null;
+        });
+    }
+
+    private static ChunkPacketBlockRewriter rewriter(
+        Map<Integer, Material> ores,
+        Map<Integer, Material> salt,
+        ChunkPacketBlockRewriter.StateIdResolver stateIds
+    ) {
         ChunkPacketBlockRewriter.ChunkEntryProvider provider = new ChunkPacketBlockRewriter.ChunkEntryProvider() {
             @Override
             public Map<Integer, Material> protectedOreEntries(UUID worldId, int chunkX, int chunkZ) {
@@ -177,14 +247,7 @@ final class ChunkPacketBlockRewriterTest {
                 return salt;
             }
         };
-        return new ChunkPacketBlockRewriter(provider, material -> switch (material) {
-            case STONE -> STONE;
-            case DIAMOND_ORE -> DIAMOND_ORE;
-            case DEEPSLATE_DIAMOND_ORE -> DEEPSLATE_DIAMOND_ORE;
-            case DEEPSLATE -> DEEPSLATE;
-            case GOLD_ORE -> FAKE_GOLD;
-            default -> null;
-        });
+        return new ChunkPacketBlockRewriter(provider, stateIds);
     }
 
     private static OreveilConfig config() {
@@ -231,11 +294,21 @@ final class ChunkPacketBlockRewriterTest {
     }
 
     private static byte[] chunkBuffer(int[] blockStates, byte[] trailing) {
+        return chunkBuffer(new int[][] {blockStates}, trailing);
+    }
+
+    private static byte[] chunkBuffer(int[][] blockStateSections) {
+        return chunkBuffer(blockStateSections, new byte[0]);
+    }
+
+    private static byte[] chunkBuffer(int[][] blockStateSections, byte[] trailing) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        out.write(0);
-        out.write(0);
-        writeContainer(out, blockStates, 4);
-        writeContainer(out, filled(0, 64), 1);
+        for (int[] blockStates : blockStateSections) {
+            out.write(0);
+            out.write(0);
+            writeContainer(out, blockStates, 4);
+            writeContainer(out, filled(0, 64), 1);
+        }
         out.writeBytes(trailing);
         return out.toByteArray();
     }
@@ -245,6 +318,20 @@ final class ChunkPacketBlockRewriterTest {
         reader.readUnsignedByte();
         reader.readUnsignedByte();
         return readContainer(reader, 4096, 15);
+    }
+
+    private static int[] readSectionBlockStates(byte[] bytes, int targetSection) {
+        Reader reader = new Reader(bytes);
+        for (int section = 0; section <= targetSection; section++) {
+            reader.readUnsignedByte();
+            reader.readUnsignedByte();
+            int[] blockStates = readContainer(reader, 4096, 15);
+            readContainer(reader, 64, 6);
+            if (section == targetSection) {
+                return blockStates;
+            }
+        }
+        throw new IllegalArgumentException("Missing section " + targetSection);
     }
 
     private static void writeContainer(ByteArrayOutputStream out, int[] values, int minBits) {
