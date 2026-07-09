@@ -41,11 +41,6 @@ public final class ModernServerCompatibility implements ServerCompatibility {
     }
 
     @Override
-    public boolean supportsChunkPacketRewrite() {
-        return minecraftMajorVersion() < 26;
-    }
-
-    @Override
     public void sendBlockChange(Player player, Block block, Material visibleMaterial) {
         player.sendBlockChange(block.getLocation(), visibleMaterial.createBlockData());
     }

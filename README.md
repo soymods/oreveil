@@ -180,13 +180,13 @@ Managed world tools:
 - Distributed as one universal Paper plugin jar for Minecraft `1.16.x` through `1.21.x` and `26.x`.
 - Selects its server compatibility adapter at runtime; the artifact itself uses Java 16-compatible bytecode.
 - The server's required Java runtime still depends on its Paper version: Java 16 for `1.16.x`/`1.17.x`, Java 17+ for `1.18.x`-`1.20.4`, Java 21+ for `1.20.5`-`1.21.x`, and Java 25+ for `26.x`.
-- Integrates with ProtocolLib when installed. Runtime-incompatible chunk packet rewriting disables itself and falls back to chunk priming plus block update sync; `26.x` currently uses that fallback path for full chunk delivery.
+- Integrates with ProtocolLib when installed. Runtime-incompatible chunk packet rewriting disables itself and falls back to chunk priming plus block update sync, including on `26.x` if ProtocolLib does not expose a compatible chunk buffer.
 
 ## Known Limitations
 
 - Chunk packet rewriting is best-effort and depends on the packet shape exposed by the active Paper/ProtocolLib/runtime combination.
 - The fallback transport does not rewrite full chunk payloads. It primes loaded chunks from Oreveil's protected-ore cache and keeps block updates synchronized, but it is not equivalent to compatible packet-level chunk rewriting.
-- `26.x` currently uses the fallback path for full chunk delivery.
+- `26.x` chunk rewriting is enabled through the same ProtocolLib runtime probe as modern `1.21.x` builds, but it still requires manual smoke testing before release promotion.
 - Release confidence requires manual smoke testing with a matching Minecraft client on each supported Paper boundary listed in [`RELEASE_GATE.md`](RELEASE_GATE.md).
 - Seed-resilient placement requires private, non-zero `world-model.salt-secret` and `world-generation.secret` values when those features are enabled.
 
@@ -289,4 +289,4 @@ In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joinin
 - Oreveil builds one Java 16-compatible jar. Each Paper server still requires its own supported Java runtime; Paper `1.16.x` must be started with Java 16 because its patcher rejects Java 21.
 - On `1.16.x`, Oreveil falls back to pre-Caves-and-Cliffs materials where newer materials such as deepslate, copper, amethyst, and spyglass do not exist.
 - ProtocolLib transport is used automatically when available, depending on `transport.mode`.
-- ProtocolLib chunk packet rewriting is best-effort. If the server or ProtocolLib exposes an incompatible chunk packet shape, Oreveil disables that rewrite path for the runtime and keeps the sync fallback active. On `26.x`, the modern adapter disables full chunk packet rewriting by default and uses chunk priming plus block update sync.
+- ProtocolLib chunk packet rewriting is best-effort. If the server or ProtocolLib exposes an incompatible chunk packet shape, Oreveil disables that rewrite path for the runtime and keeps the sync fallback active.
