@@ -43,6 +43,7 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
     private PacketAdapter packetAdapter;
     private boolean warnedMultiBlockRewriteFailure;
     private boolean warnedChunkRewriteFailure;
+    private boolean warnedChunkParseFailure;
     private boolean chunkPacketRewriteDisabled;
 
     public ProtocolLibTransport(
@@ -289,7 +290,13 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
             );
 
             if (result.failed()) {
-                disableChunkPacketRewrite("Could not parse MAP_CHUNK data: " + result.failure().getMessage());
+                metrics.recordChunkRewriteFailure();
+                if (!warnedChunkParseFailure) {
+                    warnedChunkParseFailure = true;
+                    logger.warning("Skipped one MAP_CHUNK rewrite because the chunk buffer could not be parsed: "
+                        + result.failure().getMessage()
+                        + " Future chunk packets will still be rewritten; repeated failures indicate an incompatible runtime packet layout.");
+                }
                 return;
             }
 

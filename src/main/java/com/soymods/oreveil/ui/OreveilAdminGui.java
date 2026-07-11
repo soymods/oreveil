@@ -190,7 +190,9 @@ public final class OreveilAdminGui implements Listener {
         ));
         inventory.setItem(13, item(Material.REPEATER, "Sync Settings", CONTROLS,
             "Live radius: " + config.liveSyncRadiusBlocks(),
-            "Prime radius: " + config.initialSyncChunkRadius()
+            "Prime radius: " + config.initialSyncChunkRadius(),
+            "Exposed: " + config.exposedOreRevealChunkRadius() + " chunks / "
+                + config.exposedOreRevealVerticalRadiusBlocks() + " blocks"
         ));
         inventory.setItem(14, item(Material.WATER_BUCKET, "Exposure Rules", CONTROLS,
             "Adjacent: " + config.revealAdjacentMaterials().size() + " materials",
@@ -327,6 +329,7 @@ public final class OreveilAdminGui implements Listener {
         numericRow(inventory, 10, "Live Sync Radius", Material.REPEATER, config.liveSyncRadiusBlocks(), 16);
         numericRow(inventory, 19, "Chunk Prime Radius", Material.COMPARATOR, config.initialSyncChunkRadius(), 1);
         numericRow(inventory, 28, "Exposed Chunk Radius", Material.REDSTONE, config.exposedOreRevealChunkRadius(), 1);
+        numericRow(inventory, 37, "Exposed Vertical Radius", Material.LADDER, config.exposedOreRevealVerticalRadiusBlocks(), 8);
         back(inventory, 49);
     }
 
@@ -645,9 +648,18 @@ public final class OreveilAdminGui implements Listener {
                 "Exposed Refresh Radius",
                 plugin.oreveilConfig().exposedOreRevealChunkRadius(),
                 0,
-                96
+                12
             ));
             case 30 -> adjustInteger("obfuscation.exposed-ore-reveal-chunk-radius", plugin.oreveilConfig().exposedOreRevealChunkRadius(), 1, 0, 12);
+            case 37 -> adjustInteger("obfuscation.exposed-ore-reveal-vertical-radius-blocks", plugin.oreveilConfig().exposedOreRevealVerticalRadiusBlocks(), -8, 0, 256);
+            case 38 -> openSignInput(player, new PendingSignInput(
+                "obfuscation.exposed-ore-reveal-vertical-radius-blocks",
+                "Exposed Vertical Radius",
+                plugin.oreveilConfig().exposedOreRevealVerticalRadiusBlocks(),
+                0,
+                256
+            ));
+            case 39 -> adjustInteger("obfuscation.exposed-ore-reveal-vertical-radius-blocks", plugin.oreveilConfig().exposedOreRevealVerticalRadiusBlocks(), 8, 0, 256);
             case 49 -> {
                 open(player, Screen.MAIN);
                 return;
@@ -656,7 +668,7 @@ public final class OreveilAdminGui implements Listener {
                 return;
             }
         }
-        if (slot == 11 || slot == 20 || slot == 29) {
+        if (slot == 11 || slot == 20 || slot == 29 || slot == 38) {
             return;
         }
         feedback(player, "Sync setting updated.");

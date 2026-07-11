@@ -4,7 +4,10 @@ obfuscation:
   reveal-next-to-non-occluding-blocks: true
   # Exposed ores are revealed per player in this chunk radius. Updates occur only
   # on chunk transitions and block changes rather than continuously while moving.
-  exposed-ore-reveal-chunk-radius: 6
+  exposed-ore-reveal-chunk-radius: 2
+  # Vertical block radius paired with exposed-ore-reveal-chunk-radius so large caves
+  # do not pop nearby ore, while stacked caves do not become a long-range x-ray signal.
+  exposed-ore-reveal-vertical-radius-blocks: 64
   live-sync-radius-blocks: 64
   initial-sync-chunk-radius: 0
 

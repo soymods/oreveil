@@ -24,6 +24,7 @@ final class OreveilConfigLoaderTest {
     void clampsRiskyNumericSettingsToSafeBounds() {
         YamlConfiguration yaml = new YamlConfiguration();
         yaml.set("obfuscation.exposed-ore-reveal-chunk-radius", -10);
+        yaml.set("obfuscation.exposed-ore-reveal-vertical-radius-blocks", -10);
         yaml.set("obfuscation.live-sync-radius-blocks", 1);
         yaml.set("obfuscation.initial-sync-chunk-radius", -1);
         yaml.set("world-model.salt-density", 0);
@@ -34,6 +35,7 @@ final class OreveilConfigLoaderTest {
         OreveilConfig config = new OreveilConfigLoader(Logger.getAnonymousLogger()).load(yaml);
 
         assertEquals(0, config.exposedOreRevealChunkRadius());
+        assertEquals(0, config.exposedOreRevealVerticalRadiusBlocks());
         assertEquals(16, config.liveSyncRadiusBlocks());
         assertEquals(0, config.initialSyncChunkRadius());
         assertEquals(1, config.saltDensity());
@@ -50,6 +52,8 @@ final class OreveilConfigLoaderTest {
         assertEquals(Material.NETHERRACK, config.resolveDimensionDefault(World.Environment.NETHER));
         assertEquals(Material.END_STONE, config.resolveDimensionDefault(World.Environment.THE_END));
         assertEquals("AUTO", config.transportMode());
+        assertEquals(2, config.exposedOreRevealChunkRadius());
+        assertEquals(64, config.exposedOreRevealVerticalRadiusBlocks());
         assertFalse(config.saltedDistributionEnabled());
         assertFalse(config.worldGeneration().enabled());
     }

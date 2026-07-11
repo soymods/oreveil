@@ -47,6 +47,7 @@ final class HostBlockResolverTest {
             true,
             6,
             64,
+            64,
             0,
             false,
             XrayProfile.BALANCED,

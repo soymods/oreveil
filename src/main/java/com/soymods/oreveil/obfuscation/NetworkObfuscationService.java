@@ -107,7 +107,12 @@ public final class NetworkObfuscationService {
 
         if (config.revealOnExposure()
             && exposureService.isLegitimatelyExposed(block)
-            && isWithinRevealChunks(viewer, block, config.exposedOreRevealChunkRadius())) {
+            && isWithinRevealRange(
+                viewer,
+                block,
+                config.exposedOreRevealChunkRadius(),
+                config.exposedOreRevealVerticalRadiusBlocks()
+            )) {
             return block.getType();
         }
 
@@ -119,16 +124,17 @@ public final class NetworkObfuscationService {
         return getClientVisibleMaterial(block, null);
     }
 
-    private static boolean isWithinRevealChunks(Player player, Block block, int radius) {
-        if (player == null || player.getWorld() != block.getWorld() || radius < 0) {
+    private static boolean isWithinRevealRange(Player player, Block block, int chunkRadius, int verticalRadiusBlocks) {
+        if (player == null || player.getWorld() != block.getWorld() || chunkRadius < 0 || verticalRadiusBlocks < 0) {
             return false;
         }
         int playerChunkX = player.getLocation().getBlockX() >> 4;
         int playerChunkZ = player.getLocation().getBlockZ() >> 4;
         int blockChunkX = block.getX() >> 4;
         int blockChunkZ = block.getZ() >> 4;
-        return Math.abs(playerChunkX - blockChunkX) <= radius
-            && Math.abs(playerChunkZ - blockChunkZ) <= radius;
+        return Math.abs(playerChunkX - blockChunkX) <= chunkRadius
+            && Math.abs(playerChunkZ - blockChunkZ) <= chunkRadius
+            && Math.abs(player.getLocation().getBlockY() - block.getY()) <= verticalRadiusBlocks;
     }
 
     // -------------------------------------------------------------------------

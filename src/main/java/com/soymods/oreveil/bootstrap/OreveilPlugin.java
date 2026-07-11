@@ -214,6 +214,7 @@ public final class OreveilPlugin extends JavaPlugin {
             || oldConfig.obfuscationEnabled() != newConfig.obfuscationEnabled()
             || oldConfig.revealOnExposure() != newConfig.revealOnExposure()
             || oldConfig.exposedOreRevealChunkRadius() != newConfig.exposedOreRevealChunkRadius()
+            || oldConfig.exposedOreRevealVerticalRadiusBlocks() != newConfig.exposedOreRevealVerticalRadiusBlocks()
             || !oldConfig.transportMode().equalsIgnoreCase(newConfig.transportMode())
             || !oldConfig.dimensionDefaults().equals(newConfig.dimensionDefaults())
             || !oldConfig.oreOverrides().equals(newConfig.oreOverrides());

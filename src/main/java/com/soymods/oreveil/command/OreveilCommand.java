@@ -368,6 +368,19 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         );
         sendMessage(
             sender,
+            "Controls",
+            CONTROLS,
+            Component.text("Live sync: ", BASE)
+                .append(highlight(String.valueOf(config.liveSyncRadiusBlocks()), CONTROLS))
+                .append(Component.text(" blocks  Exposed reveal: ", BASE))
+                .append(highlight(
+                    config.exposedOreRevealChunkRadius() + " chunks / "
+                        + config.exposedOreRevealVerticalRadiusBlocks() + " blocks vertical",
+                    CONTROLS
+                ))
+        );
+        sendMessage(
+            sender,
             "World",
             WORLD,
             Component.text("Xray profile: ", BASE)
@@ -1288,6 +1301,7 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
         sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " explain salt_density", CONTROLS, "Shows one setting's meaning and example command."));
         sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " set xray_profile aggressive", WORLD, "Changes the fake-ore behavior preset."));
         sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " set live_sync_radius 96", CONTROLS, "Sets one scalar value."));
+        sendMessage(sender, "Settings", CONTROLS, commandLine("/" + label + " set reveal_vertical_radius 64", CONTROLS, "Sets exposed ore vertical reveal range."));
         sendDivider(sender);
     }
 
@@ -1934,10 +1948,25 @@ public final class OreveilCommand implements CommandExecutor, TabCompleter {
             0,
             12,
             1,
-            List.of("4", "6", "8"),
+            List.of("1", "2", "4"),
             List.of(),
-            "Chunk radius where exposed cave ores are revealed on chunk transitions.",
+            "Horizontal chunk radius where exposed cave ores are revealed on chunk transitions.",
             OreveilConfig::exposedOreRevealChunkRadius
+        ),
+        REVEAL_VERTICAL_RADIUS(
+            "reveal_vertical_radius",
+            "obfuscation.exposed-ore-reveal-vertical-radius-blocks",
+            "Exposed Vertical Radius",
+            "Controls",
+            CONTROLS,
+            SettingType.INTEGER,
+            0,
+            256,
+            8,
+            List.of("32", "64", "96"),
+            List.of(),
+            "Vertical block radius paired with exposed chunk radius for exposed cave ore reveals.",
+            OreveilConfig::exposedOreRevealVerticalRadiusBlocks
         ),
         SALTED_DISTRIBUTION(
             "salted_distribution",
