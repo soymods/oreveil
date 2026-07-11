@@ -187,12 +187,7 @@ Managed world tools:
 - Chunk packet rewriting is best-effort and depends on the packet shape exposed by the active Paper/ProtocolLib/runtime combination.
 - The fallback transport does not rewrite full chunk payloads. It primes loaded chunks from Oreveil's protected-ore cache and keeps block updates synchronized, but it is not equivalent to compatible packet-level chunk rewriting.
 - `26.x` chunk rewriting is enabled through the same ProtocolLib runtime probe as modern `1.21.x` builds, but it still requires manual smoke testing before release promotion.
-- Release confidence requires manual smoke testing with a matching Minecraft client on each supported Paper boundary listed in [`RELEASE_GATE.md`](RELEASE_GATE.md).
 - Seed-resilient placement requires private, non-zero `world-model.salt-secret` and `world-generation.secret` values when those features are enabled.
-
-## Release Readiness
-
-Use [`RELEASE_GATE.md`](RELEASE_GATE.md) before promoting a build.
 
 ## License
 
@@ -280,7 +275,7 @@ In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joinin
 
 | Component | Version |
 |-----------|---------|
-| Plugin Version | `0.1.2` |
+| Plugin Version | `0.1.3` |
 | Target Minecraft Version | `1.16.x`-`1.21.x`, `26.x` |
 | Plugin bytecode | Java 16 |
 

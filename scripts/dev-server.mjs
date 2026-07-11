@@ -12,7 +12,7 @@ const root = resolve(new URL("..", import.meta.url).pathname);
 const props = readProperties(join(root, "gradle.properties"));
 const minecraftVersion = process.env.PAPER_VERSION ?? props.minecraft_version ?? "1.21";
 const archivesBaseName = props.archives_base_name ?? "oreveil";
-const pluginVersion = props.plugin_version ?? "0.1.1";
+const pluginVersion = props.plugin_version ?? "0.1.3";
 let targetName;
 try {
   targetName = normalizeTarget(process.env.OREVEIL_TARGET ?? targetForMinecraftVersion(minecraftVersion));
