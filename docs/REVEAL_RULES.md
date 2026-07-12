@@ -14,6 +14,7 @@ This rule set keeps reveal semantics explicit and config-driven while leaving ro
 - World changes that can affect exposure now trigger targeted resends for nearby players.
 - The default transport mode is `AUTO`, which uses ProtocolLib when available and falls back to `Player#sendBlockChange` live correction.
 - Loaded chunks are indexed once for protected ore positions, so join/teleport/reload priming can avoid rescanning every block in the chunk.
+- On Folia, Oreveil always uses region-aware chunk priming and block update sync; ProtocolLib packet transport is disabled.
 - Block placement, breaks, explosions, piston movement, fluid flow, falling-block changes, and natural block transformations refresh the cached protected-ore index.
 - `/oreveil diagnostics` reports rewrite counters, chunk prime counters, synthetic block sends, ProtocolLib wrapper failures, and cache sizes.
 - ProtocolLib chunk rewriting uses the cached protected-ore and salt index to rewrite outgoing chunk block-state data before send when runtime block-state IDs and the chunk buffer format are compatible.
@@ -25,6 +26,7 @@ This rule set keeps reveal semantics explicit and config-driven while leaving ro
 - Outbound chunk packets are rewritten directly for cached hidden ore/salt positions when the runtime supports that packet format, then followed by a targeted prime pass for that player.
 - If the server runtime cannot expose block-state IDs or the chunk buffer format changes, Oreveil leaves that chunk packet untouched, records a diagnostics failure, and still uses post-send chunk priming.
 - On Paper `26.x`, Oreveil attempts the same ProtocolLib chunk rewrite path as modern `1.21.x` builds. If ProtocolLib does not expose a compatible chunk buffer, Oreveil disables chunk rewriting for that runtime and keeps chunk priming plus block update sync active.
+- On Folia, Oreveil does not use ProtocolLib transport even if ProtocolLib is installed. Folia compatibility relies on the fallback sync path and region scheduler.
 
 ## Salted Distribution
 
@@ -38,3 +40,4 @@ This rule set keeps reveal semantics explicit and config-driven while leaving ro
 - Server owners should set `world-generation.secret` to a private random long before enabling `world-generation.enabled`.
 - Public seed knowledge is not enough to predict Oreveil's managed-world ore remix layer when the generation secret is private.
 - Oreveil writes a persistent generation-pass marker to each managed chunk after mutation, so already-processed chunks are not remixed again on later loads or reloads.
+- Managed-world generation is disabled on Folia in the current compatibility pass.

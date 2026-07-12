@@ -3,7 +3,7 @@
 # Oreveil
 
 [![Minecraft](https://img.shields.io/badge/Minecraft-1.16.x--1.21.x%20%7C%2026.x-00AA00?style=for-the-badge&logo=minecraft)](https://minecraft.net)
-[![Paper](https://img.shields.io/badge/Paper-Server%20Plugin-FFFFFF?style=for-the-badge&logo=papermc&logoColor=black)](https://papermc.io)
+[![Paper/Folia](https://img.shields.io/badge/Paper%20%2F%20Folia-Server%20Plugin-FFFFFF?style=for-the-badge&logo=papermc&logoColor=black)](https://papermc.io)
 [![Java](https://img.shields.io/badge/Java-Universal%20Jar-FF6B6B?style=for-the-badge&logo=openjdk)](https://openjdk.org)
 
 Deterministic server-side ore obfuscation and private-seed ore placement for Minecraft servers.
@@ -177,9 +177,10 @@ Managed world tools:
 
 ## Compatibility
 
-- Distributed as one universal Paper plugin jar for Minecraft `1.16.x` through `1.21.x` and `26.x`.
+- Distributed as one universal Paper-family plugin jar for Paper and experimental Folia servers.
+- Paper targets Minecraft `1.16.x` through `1.21.x` and `26.x`. Folia support is available for Folia versions published by PaperMC and should be treated as experimental until server-specific smoke tests pass.
 - Selects its server compatibility adapter at runtime; the artifact itself uses Java 16-compatible bytecode.
-- The server's required Java runtime still depends on its Paper version: Java 16 for `1.16.x`/`1.17.x`, Java 17+ for `1.18.x`-`1.20.4`, Java 21+ for `1.20.5`-`1.21.x`, and Java 25+ for `26.x`.
+- The server's required Java runtime still depends on its server version: Java 16 for `1.16.x`/`1.17.x`, Java 17+ for `1.18.x`-`1.20.4`, Java 21+ for `1.20.5`-`1.21.x`, and Java 25+ for `26.x`.
 - Integrates with ProtocolLib when installed. Runtime-incompatible chunk packet rewriting disables itself and falls back to chunk priming plus block update sync, including on `26.x` if ProtocolLib does not expose a compatible chunk buffer.
 - Folia support is experimental. Folia uses region-aware scheduling and block update sync transport; ProtocolLib packet transport and managed-world generation are disabled on Folia in this compatibility pass.
 
@@ -232,13 +233,13 @@ PAPER_VERSION=1.21.4 node scripts/dev-server.mjs
 To run Folia, set `SERVER_SOFTWARE=folia`. Folia mode uses the same Oreveil jar, stores its server under `build/dev-server/folia/<version>/`, and intentionally skips ProtocolLib because Oreveil disables packet transport on Folia:
 
 ```bash
-SERVER_SOFTWARE=folia PAPER_VERSION=1.21.4 node scripts/dev-server.mjs
+SERVER_SOFTWARE=folia PAPER_VERSION=1.21.11 node scripts/dev-server.mjs
 ```
 
 You can also use `FOLIA_VERSION` if you want the command to read explicitly as a Folia run:
 
 ```bash
-SERVER_SOFTWARE=folia FOLIA_VERSION=1.21.4 node scripts/dev-server.mjs
+SERVER_SOFTWARE=folia FOLIA_VERSION=1.21.11 node scripts/dev-server.mjs
 ```
 
 If `25565` is already in use, the script automatically picks the next available port and prints the join address. Use `SERVER_PORT` to pin a specific port:
@@ -262,7 +263,7 @@ node scripts/dev-server.mjs --watch
 Folia watch mode works the same way:
 
 ```bash
-SERVER_SOFTWARE=folia PAPER_VERSION=1.21.4 node scripts/dev-server.mjs --watch
+SERVER_SOFTWARE=folia FOLIA_VERSION=1.21.11 node scripts/dev-server.mjs --watch
 ```
 
 Useful options:
@@ -271,7 +272,7 @@ Useful options:
 - `--no-build`: skip Gradle build and deploy the existing `build/libs/` jar. Run `./gradlew build -q` first if you need fresh code in the jar.
 - `--prepare-only`: download/provision the dev server and deploy the jar, then exit without starting the server.
 - `SERVER_SOFTWARE=paper|folia`: choose the server implementation. Defaults to `paper`.
-- `PAPER_VERSION=<version>`: run a different Minecraft version than `gradle.properties`; supported Oreveil targets are `1.16.x` through `1.21.x` and `26.x`.
+- `PAPER_VERSION=<version>`: run a different Minecraft version than `gradle.properties`; supported Paper targets are `1.16.x` through `1.21.x` and `26.x`.
 - `FOLIA_VERSION=<version>`: Folia-specific version override. If set, it takes precedence over `PAPER_VERSION`.
 - `SERVER_URL=<url>`: use a specific server jar URL instead of the PaperMC downloads API.
 - `PAPER_URL=<url>` / `FOLIA_URL=<url>`: server-specific jar URL overrides.
@@ -304,11 +305,12 @@ For Folia testing, confirm the startup log says Folia was detected, transport is
 |-----------|---------|
 | Plugin Version | `0.1.3` |
 | Target Minecraft Version | `1.16.x`-`1.21.x`, `26.x` |
+| Supported Server Software | Paper; Folia experimental |
 | Plugin bytecode | Java 16 |
 
 ## Notes
 
-- Oreveil builds one Java 16-compatible jar. Each Paper server still requires its own supported Java runtime; Paper `1.16.x` must be started with Java 16 because its patcher rejects Java 21.
+- Oreveil builds one Java 16-compatible jar. Each Paper-family server still requires its own supported Java runtime; Paper `1.16.x` must be started with Java 16 because its patcher rejects Java 21.
 - On `1.16.x`, Oreveil falls back to pre-Caves-and-Cliffs materials where newer materials such as deepslate, copper, amethyst, and spyglass do not exist.
 - ProtocolLib transport is used automatically when available, depending on `transport.mode`.
 - ProtocolLib chunk packet rewriting is best-effort. If the server or ProtocolLib exposes an incompatible chunk packet shape, Oreveil disables that rewrite path for the runtime and keeps the sync fallback active.

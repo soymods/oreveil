@@ -1,0 +1,154 @@
+[CENTER][URL='https://soymods.com/oreveil/'][IMG]https://wsrv.nl/?url=raw.githubusercontent.com/soymods/assets/main/soymods-assets/oreveil/oreveil_render.png&w=900[/IMG][/URL]
+
+[URL='https://papermc.io/'][IMG]https://img.shields.io/badge/Supports-Paper%20%2F%20Folia-ffffff?style=for-the-badge[/IMG][/URL] [URL='https://www.spigotmc.org/resources/protocollib.1997/'][IMG]https://img.shields.io/badge/Recommended-ProtocolLib-2ea44f?style=for-the-badge[/IMG][/URL] [URL='https://discord.gg/7nGRX2d8a6'][IMG]https://img.shields.io/badge/Discord-Join%20server-5865F2?style=for-the-badge&logo=discord&logoColor=white[/IMG][/URL]
+
+[B]Server-authoritative ore protection for x-ray and seed-aware mining.[/B]
+
+[B]Recommended:[/B] Install [URL='https://www.spigotmc.org/resources/protocollib.1997/']ProtocolLib[/URL] on Paper to enable Oreveil's packet-rewriting transport where supported. ProtocolLib is not used on Folia.
+[/CENTER]
+
+[SIZE=5][B]What Is Oreveil?[/B][/SIZE]
+
+Oreveil is a server-side ore protection plugin for Paper, with experimental Folia support, that helps defend against x-ray clients, transparent resource packs, Baritone-assisted mining, and seed-based ore prediction.
+
+Instead of sending every client the true state of hidden underground ores, Oreveil keeps protected ore state server-authoritative and presents buried ores as natural host blocks until they are legitimately exposed through gameplay. Hidden ore can look like stone, deepslate, netherrack, tuff, or other configured host blocks depending on the dimension and ore type.
+
+Optional server-private salted distribution can add fake ore signals that are not derived from the public world seed alone. For managed worlds on Paper, Oreveil can also remix vanilla ore placement with a private generation secret so regenerated ore locations are not predictable from the public seed.
+
+Oreveil is distributed as one universal JAR. Paper is supported from Minecraft 1.16.x through 1.21.x and 26.x. Folia support is experimental and available for Folia versions published by PaperMC.
+
+[SIZE=5][B]Why Oreveil?[/B][/SIZE]
+
+[LIST]
+[*]Designed to reduce value from common x-ray clients and resource-pack x-ray
+[*]Reduces public seed-based ore prediction
+[*]Per-player ore presentation instead of global reveal state
+[*]Legitimate exposure-based reveal rules
+[*]Believable natural host-block replacement
+[*]Protected raw ore blocks included by default
+[*]ProtocolLib packet rewriting on compatible Paper runtimes
+[*]Fallback chunk priming and block update sync when packet rewriting is unavailable
+[*]Experimental Folia support with region-aware scheduling
+[*]In-game administration GUI
+[*]Live diagnostics and block inspection tools
+[*]One universal JAR for supported Paper-family servers
+[/LIST]
+
+[SIZE=5][B]How It Works[/B][/SIZE]
+
+[LIST]
+[*][B]Server-Authoritative Protection[/B] - Oreveil tracks protected ores on the server and decides what each player is allowed to see.
+[*][B]Exposure-Gated Reveals[/B] - Ores reveal only when adjacent exposure rules say they should, such as air, fluids, transparent blocks, or configured non-occluding neighbors.
+[*][B]Per-Player Obfuscation[/B] - Every player can receive an independent block presentation, so one player's reveal does not automatically leak underground data to everyone else.
+[*][B]Natural Block Replacement[/B] - Hidden ores are replaced with dimension-appropriate host blocks such as stone, deepslate, netherrack, granite, or tuff.
+[*][B]Packet-Aware Transport[/B] - On compatible Paper + ProtocolLib runtimes, Oreveil rewrites outgoing chunk and block update data before the client receives it.
+[*][B]Compatibility Fallback[/B] - When full chunk rewriting is unavailable, Oreveil primes loaded chunks and sends synchronized block updates to keep the client view aligned.
+[*][B]Private-Seed Protection[/B] - Optional salted distribution and Paper managed-world remixing use server-private secrets so public seed knowledge is less useful.
+[*][B]Live World Sync[/B] - Mining, explosions, fluids, pistons, block placement, chunk loading, teleporting, movement, and respawns trigger targeted client corrections.
+[*][B]Diagnostics[/B] - The admin GUI and commands expose transport status, chunk priming, packet rewrite counters, synthetic block sends, and cache sizes.
+[/LIST]
+
+[SPOILER="See Salted Distribution in Action"]
+
+Public world seeds can be used to predict naturally generated ore locations.
+
+With Oreveil's optional server-private salted distribution enabled, fake ore signals make those predictions significantly less reliable while preserving normal mining.
+
+[CENTER][B]Salted Distribution Disabled[/B]
+
+[IMG]https://cdn.modrinth.com/data/iioRchJL/images/edf92ff79acfff838abf821b04012add31778dd5.png[/IMG][/CENTER]
+
+[CENTER][B]Salted Distribution Enabled[/B]
+
+[IMG]https://cdn.modrinth.com/data/iioRchJL/images/3d32ce6de1d8b6c0a840219072161304506dddd5.png[/IMG][/CENTER]
+
+[/SPOILER]
+
+[SIZE=5][B]Quick Start[/B][/SIZE]
+
+[LIST=1]
+[*]Download the universal Oreveil JAR.
+[*]Place it inside your [ICODE]plugins[/ICODE] folder.
+[*]For Paper servers, optionally install a compatible version of ProtocolLib.
+[*]Restart your server.
+[*]Run [ICODE]/oreveil[/ICODE] as an operator or a player with [ICODE]oreveil.admin[/ICODE].
+[*]Use [ICODE]/oreveil diagnostics[/ICODE] and [ICODE]/oreveil inspect[/ICODE] to verify transport and reveal behavior.
+[/LIST]
+
+[SIZE=5][B]Supported Server Software[/B][/SIZE]
+
+[LIST]
+[*][B]Paper[/B] - Supported for Minecraft 1.16.x through 1.21.x and 26.x.
+[*][B]Folia[/B] - Experimental support. Uses region-aware scheduling and fallback block update sync.
+[/LIST]
+
+[B]Java Requirements[/B]
+
+[LIST]
+[*]1.16.x - Java 16
+[*]1.17.x - Java 16
+[*]1.18.x - Java 17+
+[*]1.19.x - Java 17+
+[*]1.20.0-1.20.4 - Java 17+
+[*]1.20.5-1.21.x - Java 21+
+[*]26.x - Java 25+
+[/LIST]
+
+Oreveil itself is compiled for Java 16 compatibility. The Java requirements above come from the corresponding server versions.
+
+[SPOILER="Commands"]
+
+[LIST]
+[*][ICODE]/oreveil[/ICODE]
+[*][ICODE]/oreveil status[/ICODE]
+[*][ICODE]/oreveil inspect[/ICODE]
+[*][ICODE]/oreveil diagnostics[/ICODE]
+[*][ICODE]/oreveil reload[/ICODE]
+[*][ICODE]/oreveil reset confirm[/ICODE]
+[/LIST]
+
+Use [ICODE]/oreveil help[/ICODE] or [ICODE]/oreveil help <topic>[/ICODE] for the complete command reference.
+
+[CODE]/oreveil set live_sync_radius 96
+/oreveil toggle reveal_on_exposure
+/oreveil ore add DIAMOND_ORE
+/oreveil ore toggle ANCIENT_DEBRIS
+/oreveil exposure adjacent add WATER
+/oreveil host default NORMAL STONE
+/oreveil host override ANCIENT_DEBRIS NETHERRACK
+/oreveil world status[/CODE]
+
+[/SPOILER]
+
+[SPOILER="Advanced Information"]
+
+[B]Designed to Help Protect Against[/B]
+
+[LIST]
+[*]Common x-ray clients
+[*]Transparent x-ray resource packs
+[*]Baritone-assisted ore hunting
+[*]Public seed-based ore prediction
+[*]Packet-based reveal leaks
+[/LIST]
+
+[B]Transport Notes[/B]
+
+[LIST]
+[*]On Paper, [ICODE]AUTO[/ICODE] mode uses ProtocolLib packet rewriting when ProtocolLib is installed and the runtime exposes a compatible packet/chunk shape.
+[*]If chunk rewriting is unavailable, Oreveil falls back to chunk priming plus block update sync.
+[*]On Folia, ProtocolLib packet transport is disabled even if ProtocolLib is installed.
+[*]Folia uses region-aware scheduling and block update sync.
+[*]Paper 26.x uses the same runtime compatibility probe as modern 1.21.x builds and falls back automatically if full chunk rewriting is unavailable.
+[/LIST]
+
+[B]Current Folia Limitations[/B]
+
+[LIST]
+[*]Folia support is experimental.
+[*]Folia does not use ProtocolLib packet transport.
+[*]Managed-world ore remixing is disabled on Folia in the current compatibility pass.
+[*]Folia relies on chunk priming and block update sync, not packet-level initial chunk sanitization.
+[/LIST]
+
+[/SPOILER]
