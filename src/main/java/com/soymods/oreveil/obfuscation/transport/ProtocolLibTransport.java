@@ -14,10 +14,10 @@ import com.comphenix.protocol.wrappers.WrappedLevelChunkData;
 import com.comphenix.protocol.wrappers.WrappedBlockData;
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.obfuscation.ObfuscationMetrics;
+import com.soymods.oreveil.util.OreveilScheduler;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import java.util.function.BiFunction;
 import java.util.logging.Logger;
-import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -36,6 +36,7 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
     private final AuthoritativeWorldModel worldModel;
     private final ObfuscationMetrics metrics;
     private final ServerCompatibility compatibility;
+    private final OreveilScheduler scheduler;
     private final ChunkPacketBlockRewriter chunkRewriter;
     private ProtocolManager protocolManager;
     private OreveilConfig config;
@@ -59,6 +60,9 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
         this.worldModel = worldModel;
         this.metrics = metrics;
         this.compatibility = compatibility;
+        this.scheduler = plugin instanceof com.soymods.oreveil.bootstrap.OreveilPlugin oreveilPlugin
+            ? oreveilPlugin.scheduler()
+            : new OreveilScheduler(plugin, plugin.getLogger());
         this.chunkRewriter = new ChunkPacketBlockRewriter(worldModel);
     }
 
@@ -344,7 +348,7 @@ public final class ProtocolLibTransport implements ObfuscationTransport {
     }
 
     private void scheduleChunkPrime(Player player, int chunkX, int chunkZ, long delayTicks) {
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        scheduler.runForLater(player, () -> {
             if (!player.isOnline()) {
                 return;
             }

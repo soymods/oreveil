@@ -7,6 +7,7 @@ import com.soymods.oreveil.obfuscation.transport.BlockUpdateSyncTransport;
 import com.soymods.oreveil.obfuscation.transport.ObfuscationTransport;
 import com.soymods.oreveil.obfuscation.transport.ProtocolLibTransport;
 import com.soymods.oreveil.obfuscation.transport.TransportMode;
+import com.soymods.oreveil.util.OreveilRuntime;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import java.lang.reflect.Method;
 import java.util.UUID;
@@ -65,6 +66,15 @@ public final class ModernServerCompatibility implements ServerCompatibility {
     ) {
         TransportMode mode = TransportMode.fromConfig(config.transportMode());
         boolean protocolLibPresent = isPluginPresent("ProtocolLib");
+
+        if (OreveilRuntime.isFolia()) {
+            if (mode == TransportMode.PROTOCOLLIB) {
+                logger.warning("ProtocolLib transport is disabled on Folia. Using block update sync transport instead.");
+            } else if (mode == TransportMode.AUTO && protocolLibPresent) {
+                logger.info("Folia detected. Skipping ProtocolLib transport and using block update sync transport.");
+            }
+            return new BlockUpdateSyncTransport(plugin, logger, metrics, this);
+        }
 
         if (mode == TransportMode.PROTOCOLLIB && protocolLibPresent) {
             return new ProtocolLibTransport(plugin, logger, worldModel, metrics, this);

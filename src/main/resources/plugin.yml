@@ -2,6 +2,7 @@ name: Oreveil
 version: ${version}
 main: com.soymods.oreveil.bootstrap.OreveilPlugin
 api-version: "${apiVersion}"
+folia-supported: true
 description: Deterministic server-side ore obfuscation with exposure-gated reveal rules.
 author: soymods
 load: STARTUP

@@ -41,7 +41,7 @@ public final class OreveilConfigLoader {
             Math.max(0, config.getInt("obfuscation.exposed-ore-reveal-chunk-radius", 2)),
             Math.max(0, config.getInt("obfuscation.exposed-ore-reveal-vertical-radius-blocks", 64)),
             Math.max(16, config.getInt("obfuscation.live-sync-radius-blocks", 64)),
-            Math.max(0, config.getInt("obfuscation.initial-sync-chunk-radius", 0)),
+            Math.max(0, config.getInt("obfuscation.initial-sync-chunk-radius", 8)),
             config.getBoolean("world-model.salted-distribution", false),
             XrayProfile.fromConfig(config.getString("world-model.xray-profile", "balanced")),
             Math.max(1, config.getInt("world-model.salt-density", 96)),

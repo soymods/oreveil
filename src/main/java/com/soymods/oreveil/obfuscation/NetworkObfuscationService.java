@@ -5,10 +5,12 @@ import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.exposure.ExposureService;
 import com.soymods.oreveil.obfuscation.transport.ObfuscationTransport;
 import com.soymods.oreveil.util.BlockNeighborhoods;
+import com.soymods.oreveil.util.OreveilScheduler;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.logging.Logger;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
@@ -29,6 +31,7 @@ public final class NetworkObfuscationService {
     private ObfuscationTransport transport;
     private final Plugin plugin;
     private final ServerCompatibility compatibility;
+    private final OreveilScheduler scheduler;
 
     public NetworkObfuscationService(
         Plugin plugin,
@@ -41,6 +44,9 @@ public final class NetworkObfuscationService {
         this.logger = logger;
         this.plugin = plugin;
         this.compatibility = compatibility;
+        this.scheduler = plugin instanceof com.soymods.oreveil.bootstrap.OreveilPlugin oreveilPlugin
+            ? oreveilPlugin.scheduler()
+            : new OreveilScheduler(plugin, plugin.getLogger());
         this.config = config;
         this.worldModel = worldModel;
         this.exposureService = exposureService;
@@ -60,6 +66,12 @@ public final class NetworkObfuscationService {
                 + exposureService.getClass().getSimpleName()
                 + '.'
         );
+        if (!transport.handlesChunkDelivery() && config.initialSyncChunkRadius() == 0) {
+            logger.info(
+                "Chunk delivery is not intercepted and initial-sync-chunk-radius is 0; "
+                    + "using fallback chunk priming around players to reduce initial ore leakage."
+            );
+        }
     }
 
     public void stop() {
@@ -158,15 +170,9 @@ public final class NetworkObfuscationService {
                 continue;
             }
 
-            World world = neighbor.getWorld();
-            Location loc = neighbor.getLocation();
-            double maxDistSq = (double) config.liveSyncRadiusBlocks() * config.liveSyncRadiusBlocks();
-            for (Player player : world.getPlayers()) {
-                if (player.getLocation().distanceSquared(loc) <= maxDistSq) {
-                    Material visible = getClientVisibleMaterialAfterBreak(neighbor, player, removedBlock, saltMaterial, protectedOre);
-                    transport.syncBlockToPlayer(player, neighbor, (b, p) -> visible);
-                }
-            }
+            broadcastToNearbyPlayers(neighbor, (block, player) ->
+                getClientVisibleMaterialAfterBreak(block, player, removedBlock, saltMaterial, protectedOre)
+            );
         }
     }
 
@@ -175,7 +181,7 @@ public final class NetworkObfuscationService {
     }
 
     public void syncRevealBoundaryNextTick(Block origin) {
-        plugin.getServer().getScheduler().runTask(plugin, () -> syncRevealBoundary(origin));
+        scheduler.runAt(origin.getLocation(), () -> syncRevealBoundary(origin));
     }
 
     public void syncProtectedOres(Iterable<Block> blocks) {
@@ -244,49 +250,91 @@ public final class NetworkObfuscationService {
     }
 
     public void resyncNewSaltBlocks() {
+        if (scheduler.isFolia()) {
+            for (Player player : plugin.getServer().getOnlinePlayers()) {
+                scheduler.runFor(player, () -> resyncNewSaltBlocks(player));
+            }
+            return;
+        }
+
         int viewDistance = plugin.getServer().getViewDistance();
         for (Player player : plugin.getServer().getOnlinePlayers()) {
-            World world = player.getWorld();
-            int chunkX = player.getLocation().getBlockX() >> 4;
-            int chunkZ = player.getLocation().getBlockZ() >> 4;
-            for (int dx = -viewDistance; dx <= viewDistance; dx++) {
-                for (int dz = -viewDistance; dz <= viewDistance; dz++) {
-                    int cx = chunkX + dx;
-                    int cz = chunkZ + dz;
-                    if (!world.isChunkLoaded(cx, cz)) {
-                        continue;
-                    }
-                    for (Block saltBlock : worldModel.getSaltBlocksInChunk(world.getChunkAt(cx, cz))) {
-                        transport.syncBlockToPlayer(player, saltBlock, this::getClientVisibleMaterial);
-                    }
-                }
-            }
+            resyncNewSaltBlocks(player);
         }
     }
 
     public void resyncAllPlayers(Collection<Material> candidateMaterials) {
         Set<Material> candidates = candidateMaterials instanceof Set<Material> s ? s : Set.copyOf(candidateMaterials);
-        int viewDistance = plugin.getServer().getViewDistance();
+        if (scheduler.isFolia()) {
+            for (Player player : plugin.getServer().getOnlinePlayers()) {
+                scheduler.runFor(player, () -> resyncPlayerLoadedChunks(player, candidates));
+            }
+            return;
+        }
 
         for (Player player : plugin.getServer().getOnlinePlayers()) {
-            Location loc = player.getLocation();
-            World world = loc.getWorld();
-            if (world == null) {
-                continue;
-            }
-            int chunkX = loc.getBlockX() >> 4;
-            int chunkZ = loc.getBlockZ() >> 4;
-            for (int dx = -viewDistance; dx <= viewDistance; dx++) {
-                for (int dz = -viewDistance; dz <= viewDistance; dz++) {
-                    int cx = chunkX + dx;
-                    int cz = chunkZ + dz;
-                    if (!world.isChunkLoaded(cx, cz)) {
-                        continue;
-                    }
-                    resyncChunkForPlayer(player, world.getChunkAt(cx, cz), candidates);
+            resyncPlayerLoadedChunks(player, candidates);
+        }
+    }
+
+    private void resyncNewSaltBlocks(Player player) {
+        int viewDistance = plugin.getServer().getViewDistance();
+        Location loc = player.getLocation();
+        World world = loc.getWorld();
+        if (world == null) {
+            return;
+        }
+        int chunkX = loc.getBlockX() >> 4;
+        int chunkZ = loc.getBlockZ() >> 4;
+        for (int dx = -viewDistance; dx <= viewDistance; dx++) {
+            for (int dz = -viewDistance; dz <= viewDistance; dz++) {
+                int cx = chunkX + dx;
+                int cz = chunkZ + dz;
+                if (scheduler.isFolia()) {
+                    scheduler.runAt(chunkCenter(world, cx, cz), () -> resyncSaltChunkForPlayer(player, world, cx, cz));
+                } else {
+                    resyncSaltChunkForPlayer(player, world, cx, cz);
                 }
             }
         }
+    }
+
+    private void resyncSaltChunkForPlayer(Player player, World world, int chunkX, int chunkZ) {
+        if (!player.isOnline() || player.getWorld() != world || !world.isChunkLoaded(chunkX, chunkZ)) {
+            return;
+        }
+        for (Block saltBlock : worldModel.getSaltBlocksInChunk(world.getChunkAt(chunkX, chunkZ))) {
+            transport.syncBlockToPlayer(player, saltBlock, this::getClientVisibleMaterial);
+        }
+    }
+
+    private void resyncPlayerLoadedChunks(Player player, Set<Material> candidates) {
+        int viewDistance = plugin.getServer().getViewDistance();
+        Location loc = player.getLocation();
+        World world = loc.getWorld();
+        if (world == null) {
+            return;
+        }
+        int chunkX = loc.getBlockX() >> 4;
+        int chunkZ = loc.getBlockZ() >> 4;
+        for (int dx = -viewDistance; dx <= viewDistance; dx++) {
+            for (int dz = -viewDistance; dz <= viewDistance; dz++) {
+                int cx = chunkX + dx;
+                int cz = chunkZ + dz;
+                if (scheduler.isFolia()) {
+                    scheduler.runAt(chunkCenter(world, cx, cz), () -> resyncChunkForPlayer(player, world, cx, cz, candidates));
+                } else {
+                    resyncChunkForPlayer(player, world, cx, cz, candidates);
+                }
+            }
+        }
+    }
+
+    private void resyncChunkForPlayer(Player player, World world, int chunkX, int chunkZ, Set<Material> candidates) {
+        if (!player.isOnline() || player.getWorld() != world || !world.isChunkLoaded(chunkX, chunkZ)) {
+            return;
+        }
+        resyncChunkForPlayer(player, world.getChunkAt(chunkX, chunkZ), candidates);
     }
 
     private void resyncChunkForPlayer(Player player, Chunk chunk, Set<Material> candidates) {
@@ -318,14 +366,33 @@ public final class NetworkObfuscationService {
     // -------------------------------------------------------------------------
 
     private void broadcastToNearbyPlayers(Block block) {
+        broadcastToNearbyPlayers(block, this::getClientVisibleMaterial);
+    }
+
+    private void broadcastToNearbyPlayers(Block block, BiFunction<Block, Player, Material> materialResolver) {
+        if (scheduler.isFolia()) {
+            scheduler.runAt(block.getLocation(), () -> broadcastToNearbyPlayersFromRegion(block, materialResolver));
+            return;
+        }
+        broadcastToNearbyPlayersFromRegion(block, materialResolver);
+    }
+
+    private void broadcastToNearbyPlayersFromRegion(
+        Block block,
+        BiFunction<Block, Player, Material> materialResolver
+    ) {
         World world = block.getWorld();
         Location loc = block.getLocation();
         double maxDistSq = (double) config.liveSyncRadiusBlocks() * config.liveSyncRadiusBlocks();
         for (Player player : world.getPlayers()) {
             if (player.getLocation().distanceSquared(loc) <= maxDistSq) {
-                transport.syncBlockToPlayer(player, block, this::getClientVisibleMaterial);
+                transport.syncBlockToPlayer(player, block, materialResolver);
             }
         }
+    }
+
+    private static Location chunkCenter(World world, int chunkX, int chunkZ) {
+        return new Location(world, (chunkX << 4) + 8, 0, (chunkZ << 4) + 8);
     }
 
     private Material getClientVisibleMaterialAfterBreak(

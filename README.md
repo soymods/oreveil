@@ -181,12 +181,14 @@ Managed world tools:
 - Selects its server compatibility adapter at runtime; the artifact itself uses Java 16-compatible bytecode.
 - The server's required Java runtime still depends on its Paper version: Java 16 for `1.16.x`/`1.17.x`, Java 17+ for `1.18.x`-`1.20.4`, Java 21+ for `1.20.5`-`1.21.x`, and Java 25+ for `26.x`.
 - Integrates with ProtocolLib when installed. Runtime-incompatible chunk packet rewriting disables itself and falls back to chunk priming plus block update sync, including on `26.x` if ProtocolLib does not expose a compatible chunk buffer.
+- Folia support is experimental. Folia uses region-aware scheduling and block update sync transport; ProtocolLib packet transport and managed-world generation are disabled on Folia in this compatibility pass.
 
 ## Known Limitations
 
 - Chunk packet rewriting is best-effort and depends on the packet shape exposed by the active Paper/ProtocolLib/runtime combination.
 - The fallback transport does not rewrite full chunk payloads. It primes loaded chunks from Oreveil's protected-ore cache and keeps block updates synchronized, but it is not equivalent to compatible packet-level chunk rewriting.
 - `26.x` chunk rewriting is enabled through the same ProtocolLib runtime probe as modern `1.21.x` builds, but it still requires manual smoke testing before release promotion.
+- Folia fallback sync does not provide packet-level initial chunk sanitization. It primes loaded chunks across the server view distance after join, teleport, respawn, and chunk movement to reduce persistent initial ore leakage.
 - Seed-resilient placement requires private, non-zero `world-model.salt-secret` and `world-generation.secret` values when those features are enabled.
 
 ## License
@@ -214,7 +216,7 @@ The universal artifact is written to `build/libs/oreveil-<version>.jar`.
 
 ### One-Command Dev Server
 
-Use the dev-server script to build Oreveil, provision a disposable Paper server under `build/dev-server/`, install ProtocolLib, copy the plugin jar, accept the EULA, and start the server:
+Use the dev-server script to build Oreveil, provision a disposable server under `build/dev-server/`, copy the plugin jar, accept the EULA, and start the server. Paper mode installs ProtocolLib automatically so packet transport can be tested:
 
 ```bash
 node scripts/dev-server.mjs
@@ -227,13 +229,25 @@ PAPER_VERSION=1.18.2 node scripts/dev-server.mjs
 PAPER_VERSION=1.21.4 node scripts/dev-server.mjs
 ```
 
+To run Folia, set `SERVER_SOFTWARE=folia`. Folia mode uses the same Oreveil jar, stores its server under `build/dev-server/folia/<version>/`, and intentionally skips ProtocolLib because Oreveil disables packet transport on Folia:
+
+```bash
+SERVER_SOFTWARE=folia PAPER_VERSION=1.21.4 node scripts/dev-server.mjs
+```
+
+You can also use `FOLIA_VERSION` if you want the command to read explicitly as a Folia run:
+
+```bash
+SERVER_SOFTWARE=folia FOLIA_VERSION=1.21.4 node scripts/dev-server.mjs
+```
+
 If `25565` is already in use, the script automatically picks the next available port and prints the join address. Use `SERVER_PORT` to pin a specific port:
 
 ```bash
 PAPER_VERSION=1.18.2 SERVER_PORT=25566 node scripts/dev-server.mjs
 ```
 
-Then join the printed `localhost:<port>` from a client matching the Paper version under test. To auto-op your offline-mode test player on first setup:
+Then join the printed `localhost:<port>` from a client matching the server version under test. To auto-op your offline-mode test player on first setup:
 
 ```bash
 MC_USERNAME=YourName node scripts/dev-server.mjs
@@ -245,18 +259,31 @@ For edit/test loops, use watch mode. It rebuilds, redeploys, stops the current d
 node scripts/dev-server.mjs --watch
 ```
 
+Folia watch mode works the same way:
+
+```bash
+SERVER_SOFTWARE=folia PAPER_VERSION=1.21.4 node scripts/dev-server.mjs --watch
+```
+
 Useful options:
 
 - `--reset-world`: delete the disposable `world`, `world_nether`, and `world_the_end` folders before starting.
 - `--no-build`: skip Gradle build and deploy the existing `build/libs/` jar. Run `./gradlew build -q` first if you need fresh code in the jar.
-- `--prepare-only`: download/provision the dev server and deploy the jar, then exit without starting Paper.
-- `PAPER_VERSION=<version>`: run a different Paper/Minecraft version than `gradle.properties`; supported versions are `1.16.x` through `1.21.x` and `26.x`.
-- `PAPER_URL=<url>`: use a specific Paper server jar URL instead of the Paper downloads API.
+- `--prepare-only`: download/provision the dev server and deploy the jar, then exit without starting the server.
+- `SERVER_SOFTWARE=paper|folia`: choose the server implementation. Defaults to `paper`.
+- `PAPER_VERSION=<version>`: run a different Minecraft version than `gradle.properties`; supported Oreveil targets are `1.16.x` through `1.21.x` and `26.x`.
+- `FOLIA_VERSION=<version>`: Folia-specific version override. If set, it takes precedence over `PAPER_VERSION`.
+- `SERVER_URL=<url>`: use a specific server jar URL instead of the PaperMC downloads API.
+- `PAPER_URL=<url>` / `FOLIA_URL=<url>`: server-specific jar URL overrides.
 - `PROTOCOLLIB_URL=<url>`: override the default ProtocolLib download URL. By default the dev script uses ProtocolLib `4.8.0` for `1.16.x`/`1.17.x` and `5.4.0` for newer targets.
 - `SERVER_PORT=<port>`: write a specific dev server port; when omitted, the script starts at `25565` and picks the next available port.
-- `JAVA_BIN=<path>` or `JAVA16_HOME`/`JAVA17_HOME`/`JAVA21_HOME`/`JAVA25_HOME`: choose the Java runtime used to start Paper. The script requires exact Java 16 for `1.16.x`/`1.17.x`, Java 17 or newer for `1.18.x`-`1.20.4`, Java 21 or newer for `1.20.5+`, and Java 25 or newer for `26.x`.
+- `JAVA_BIN=<path>` or `JAVA16_HOME`/`JAVA17_HOME`/`JAVA21_HOME`/`JAVA25_HOME`: choose the Java runtime used to start the server. The script requires exact Java 16 for `1.16.x`/`1.17.x`, Java 17 or newer for `1.18.x`-`1.20.4`, Java 21 or newer for `1.20.5+`, and Java 25 or newer for `26.x`.
 
-In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joining and moving around. For chunk-packet testing, confirm that chunk rewrite packet/entry counters increase and failures stay at `0`, or that Oreveil logs one chunk rewrite disablement and continues using chunk priming on runtimes where full chunk rewriting is disabled.
+In game, run `/oreveil` to open the admin GUI, then use Diagnostics after joining and moving around.
+
+For Paper packet testing, confirm that chunk rewrite packet/entry counters increase and failures stay at `0`, or that Oreveil logs one chunk rewrite disablement and continues using chunk priming on runtimes where full chunk rewriting is disabled.
+
+For Folia testing, confirm the startup log says Folia was detected, transport is `BlockUpdateSync`, and managed-world generation commands return the expected unsupported message. Mine around protected ores, move across chunk borders, teleport, respawn, and reopen `/oreveil` to smoke test the region-scheduled sync paths.
 
 ### Project Layout
 

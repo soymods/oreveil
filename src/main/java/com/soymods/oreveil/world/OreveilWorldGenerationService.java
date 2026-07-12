@@ -4,6 +4,7 @@ import com.soymods.oreveil.compat.ServerCompatibility;
 import com.soymods.oreveil.config.OreveilConfig;
 import com.soymods.oreveil.config.OreveilWorldGenerationConfig;
 import com.soymods.oreveil.util.Materials;
+import com.soymods.oreveil.util.OreveilScheduler;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -45,7 +46,6 @@ import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.scheduler.BukkitTask;
 
 public final class OreveilWorldGenerationService {
     private static final DateTimeFormatter BACKUP_SUFFIX = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
@@ -56,19 +56,27 @@ public final class OreveilWorldGenerationService {
     private final Plugin plugin;
     private final Logger logger;
     private final ServerCompatibility compatibility;
+    private final OreveilScheduler scheduler;
     private final NamespacedKey generationMarkerKey;
     private final Queue<QueuedChunk> queuedChunks = new ArrayDeque<>();
     private final Set<QueuedChunk> queuedChunkSet = new HashSet<>();
     private OreveilConfig config;
-    private BukkitTask queueTask;
+    private OreveilScheduler.TaskHandle queueTask;
     private Consumer<List<Block>> mutationSync;
     private final AtomicBoolean operationRunning = new AtomicBoolean(false);
 
-    public OreveilWorldGenerationService(Plugin plugin, Logger logger, OreveilConfig config, ServerCompatibility compatibility) {
+    public OreveilWorldGenerationService(
+        Plugin plugin,
+        Logger logger,
+        OreveilConfig config,
+        ServerCompatibility compatibility,
+        OreveilScheduler scheduler
+    ) {
         this.plugin = plugin;
         this.logger = logger;
         this.config = config;
         this.compatibility = compatibility;
+        this.scheduler = scheduler;
         this.generationMarkerKey = new NamespacedKey(plugin, "managed_generation_pass");
     }
 
@@ -84,8 +92,12 @@ public final class OreveilWorldGenerationService {
         if (queueTask != null) {
             return;
         }
+        if (scheduler.isFolia()) {
+            logger.warning("Managed-world generation is disabled on Folia in this experimental compatibility build.");
+            return;
+        }
 
-        queueTask = Bukkit.getScheduler().runTaskTimer(plugin, this::flushQueuedChunks, 1L, 1L);
+        queueTask = scheduler.runGlobalTimer(this::flushQueuedChunks, 1L, 1L);
     }
 
     public void stop() {
@@ -106,7 +118,7 @@ public final class OreveilWorldGenerationService {
     }
 
     public boolean shouldMutateNewChunks(World world) {
-        return settings().enabled() && isManagedWorld(world);
+        return !scheduler.isFolia() && settings().enabled() && isManagedWorld(world);
     }
 
     public boolean isOperationRunning() {
@@ -155,7 +167,7 @@ public final class OreveilWorldGenerationService {
 
         if (!changedBlocks.isEmpty() && mutationSync != null) {
             List<Block> completedChanges = List.copyOf(changedBlocks);
-            Bukkit.getScheduler().runTask(plugin, () -> mutationSync.accept(completedChanges));
+            scheduler.runAt(chunk.getWorld().getSpawnLocation(), () -> mutationSync.accept(completedChanges));
         }
         for (Chunk regionChunk : mutationRegion) {
             markGenerationPassApplied(regionChunk);
@@ -204,8 +216,16 @@ public final class OreveilWorldGenerationService {
         chunk.getPersistentDataContainer().set(generationMarkerKey, PersistentDataType.INTEGER, GENERATION_PASS_VERSION);
     }
 
+    private WorldRegenerationResult foliaUnsupportedResult() {
+        return WorldRegenerationResult.failure("Managed-world generation is disabled on Folia in this experimental compatibility build.");
+    }
+
     public void createManagedWorldAsync(Long seedOverride, int preloadRadius, WorldOperationListener listener) {
-        Bukkit.getScheduler().runTask(plugin, () -> {
+        if (scheduler.isFolia()) {
+            listener.onComplete(foliaUnsupportedResult());
+            return;
+        }
+        scheduler.runGlobal(() -> {
             if (!beginOperation(listener)) {
                 return;
             }
@@ -222,7 +242,11 @@ public final class OreveilWorldGenerationService {
     }
 
     public void regenerateManagedWorldAsync(Long seedOverride, int preloadRadius, WorldOperationListener listener) {
-        Bukkit.getScheduler().runTask(plugin, () -> {
+        if (scheduler.isFolia()) {
+            listener.onComplete(foliaUnsupportedResult());
+            return;
+        }
+        scheduler.runGlobal(() -> {
             if (!beginOperation(listener)) {
                 return;
             }
@@ -239,6 +263,9 @@ public final class OreveilWorldGenerationService {
     }
 
     public WorldRegenerationResult createManagedWorld(Long seedOverride) {
+        if (scheduler.isFolia()) {
+            return foliaUnsupportedResult();
+        }
         if (!operationRunning.compareAndSet(false, true)) {
             return WorldRegenerationResult.failure("A managed-world operation is already running.");
         }
@@ -279,6 +306,9 @@ public final class OreveilWorldGenerationService {
     }
 
     public WorldRegenerationResult regenerateManagedWorld(Long seedOverride) {
+        if (scheduler.isFolia()) {
+            return foliaUnsupportedResult();
+        }
         if (!operationRunning.compareAndSet(false, true)) {
             return WorldRegenerationResult.failure("A managed-world operation is already running.");
         }
@@ -341,6 +371,9 @@ public final class OreveilWorldGenerationService {
     }
 
     public WorldRegenerationResult deleteWorld(String worldName) {
+        if (scheduler.isFolia()) {
+            return foliaUnsupportedResult();
+        }
         if (!operationRunning.compareAndSet(false, true)) {
             return WorldRegenerationResult.failure("A managed-world operation is already running.");
         }
@@ -390,6 +423,9 @@ public final class OreveilWorldGenerationService {
     }
 
     public WorldRegenerationResult setDefaultWorld(String worldName) {
+        if (scheduler.isFolia()) {
+            return foliaUnsupportedResult();
+        }
         String validationError = validateWorldName(worldName);
         if (validationError != null) {
             return WorldRegenerationResult.failure(validationError);

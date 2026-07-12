@@ -10,7 +10,8 @@ import { spawn, spawnSync } from "node:child_process";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
 const props = readProperties(join(root, "gradle.properties"));
-const minecraftVersion = process.env.PAPER_VERSION ?? props.minecraft_version ?? "1.21";
+const serverSoftware = normalizeServerSoftware(process.env.SERVER_SOFTWARE ?? process.env.PAPER_PROJECT ?? "paper");
+const minecraftVersion = process.env.FOLIA_VERSION ?? process.env.PAPER_VERSION ?? props.minecraft_version ?? "1.21";
 const archivesBaseName = props.archives_base_name ?? "oreveil";
 const pluginVersion = props.plugin_version ?? "0.1.3";
 let targetName;
@@ -22,9 +23,9 @@ try {
 }
 const buildTask = "build";
 let serverPort = process.env.SERVER_PORT ?? "25565";
-const serverDir = join(root, "build", "dev-server", safePathSegment(minecraftVersion));
+const serverDir = join(root, "build", "dev-server", serverSoftware, safePathSegment(minecraftVersion));
 const pluginsDir = join(serverDir, "plugins");
-const paperJar = join(serverDir, "paper.jar");
+const serverJar = join(serverDir, `${serverSoftware}.jar`);
 const protocolLibJar = join(pluginsDir, "ProtocolLib.jar");
 const protocolLibMarker = join(pluginsDir, ".ProtocolLib.version");
 const pluginJar = join(root, "build", "libs", `${archivesBaseName}-${pluginVersion}.jar`);
@@ -71,8 +72,10 @@ async function main() {
 
 async function prepareServer() {
   await mkdir(pluginsDir, { recursive: true });
-  await ensurePaper();
-  await ensureProtocolLib();
+  await ensureServerJar();
+  if (serverSoftware === "paper") {
+    await ensureProtocolLib();
+  }
   await writeServerFiles();
 }
 
@@ -98,25 +101,25 @@ async function buildAndDeploy() {
   console.log(`Deployed ${basename(pluginJar)} as ${basename(deployedPluginJar)} to ${pluginsDir}`);
 }
 
-async function ensurePaper() {
-  if (existsSync(paperJar)) {
+async function ensureServerJar() {
+  if (existsSync(serverJar)) {
     return;
   }
 
-  console.log(`Downloading Paper ${minecraftVersion}...`);
-  const overrideUrl = process.env.PAPER_URL;
+  console.log(`Downloading ${serverSoftwareName()} ${minecraftVersion}...`);
+  const overrideUrl = process.env.SERVER_URL ?? (serverSoftware === "folia" ? process.env.FOLIA_URL : process.env.PAPER_URL);
   if (overrideUrl) {
-    await downloadFile(overrideUrl, paperJar);
+    await downloadFile(overrideUrl, serverJar);
     return;
   }
 
-  const builds = await fetchJson(`https://fill.papermc.io/v3/projects/paper/versions/${minecraftVersion}/builds`);
+  const builds = await fetchJson(`https://fill.papermc.io/v3/projects/${serverSoftware}/versions/${minecraftVersion}/builds`);
   const latest = builds.find((build) => build.channel === "STABLE") ?? builds[0];
   const download = latest?.downloads?.["server:default"];
   if (!download?.url) {
-    throw new Error(`No Paper server download found for Minecraft ${minecraftVersion}.`);
+    throw new Error(`No ${serverSoftwareName()} server download found for Minecraft ${minecraftVersion}.`);
   }
-  await downloadFile(download.url, paperJar);
+  await downloadFile(download.url, serverJar);
 }
 
 async function ensureProtocolLib() {
@@ -135,7 +138,7 @@ async function writeServerFiles() {
   await writeFile(join(serverDir, "eula.txt"), "eula=true\n");
   await writeFile(join(serverDir, "server.properties"), [
     `server-port=${serverPort}`,
-    `motd=Oreveil ${minecraftVersion} ${targetName} on ${serverPort}`,
+    `motd=Oreveil ${serverSoftwareName()} ${minecraftVersion} ${targetName} on ${serverPort}`,
     "online-mode=false",
     "white-list=false",
     "spawn-protection=0",
@@ -163,8 +166,8 @@ async function writeServerFiles() {
 }
 
 function startServer() {
-  console.log(`Starting Paper ${minecraftVersion} dev server with Oreveil target ${targetName} using Java ${serverJava.major}. Join localhost:${serverPort}.`);
-  serverProcess = spawn(serverJava.bin, ["-Xms1G", "-Xmx2G", "-jar", "paper.jar", "nogui"], {
+  console.log(`Starting ${serverSoftwareName()} ${minecraftVersion} dev server with Oreveil target ${targetName} using Java ${serverJava.major}. Join localhost:${serverPort}.`);
+  serverProcess = spawn(serverJava.bin, ["-Xms1G", "-Xmx2G", "-jar", `${serverSoftware}.jar`, "nogui"], {
     cwd: serverDir,
     stdio: ["pipe", "inherit", "inherit"],
   });
@@ -340,6 +343,18 @@ function normalizeTarget(target) {
   return target;
 }
 
+function normalizeServerSoftware(value) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "paper" || normalized === "folia") {
+    return normalized;
+  }
+  throw new Error(`Unsupported SERVER_SOFTWARE '${value}'. Use 'paper' or 'folia'.`);
+}
+
+function serverSoftwareName() {
+  return serverSoftware === "folia" ? "Folia" : "Paper";
+}
+
 function protocolLibForTarget(target) {
   if (target === "paper-1.16.x" || target === "paper-1.17.x") {
     return {
@@ -375,7 +390,7 @@ function selectJavaRuntime(target) {
   const details = checked.length > 0 ? ` Checked: ${checked.join(", ")}.` : "";
   const versionText = requirement.exact ? `Java ${requirement.major}` : `Java ${requirement.major} or newer`;
   throw new Error(
-    `Oreveil target ${target} needs ${versionText} to run its Paper dev server.`
+    `Oreveil target ${target} needs ${versionText} to run its ${serverSoftwareName()} dev server.`
       + ` Set JAVA_BIN to a matching Java executable, or set JAVA${requirement.major}_HOME/JAVA_${requirement.major}_HOME.`
       + details
   );

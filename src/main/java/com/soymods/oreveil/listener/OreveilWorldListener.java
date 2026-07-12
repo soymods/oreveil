@@ -2,6 +2,7 @@ package com.soymods.oreveil.listener;
 
 import com.soymods.oreveil.exposure.ExposureService;
 import com.soymods.oreveil.obfuscation.NetworkObfuscationService;
+import com.soymods.oreveil.util.OreveilScheduler;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -32,6 +33,7 @@ public final class OreveilWorldListener implements Listener {
     private final NetworkObfuscationService obfuscationService;
     private final ExposureService exposureService;
     private final AuthoritativeWorldModel worldModel;
+    private final OreveilScheduler scheduler;
 
     public OreveilWorldListener(
         Plugin plugin,
@@ -43,6 +45,9 @@ public final class OreveilWorldListener implements Listener {
         this.obfuscationService = obfuscationService;
         this.exposureService = exposureService;
         this.worldModel = worldModel;
+        this.scheduler = plugin instanceof com.soymods.oreveil.bootstrap.OreveilPlugin oreveilPlugin
+            ? oreveilPlugin.scheduler()
+            : new OreveilScheduler(plugin, plugin.getLogger());
     }
 
     // -------------------------------------------------------------------------
@@ -170,7 +175,7 @@ public final class OreveilWorldListener implements Listener {
     }
 
     private void refreshNextTick(Block block) {
-        plugin.getServer().getScheduler().runTask(plugin, () -> worldModel.refreshBlock(block));
+        scheduler.runAt(block.getLocation(), () -> worldModel.refreshBlock(block));
     }
 
     private void refreshNextTick(Iterable<Block> blocks) {
@@ -182,7 +187,9 @@ public final class OreveilWorldListener implements Listener {
             return;
         }
 
-        plugin.getServer().getScheduler().runTask(plugin, () -> snapshot.forEach(worldModel::refreshBlock));
+        for (Block block : snapshot) {
+            scheduler.runAt(block.getLocation(), () -> worldModel.refreshBlock(block));
+        }
     }
 
     private void refreshExposureNextTick(Iterable<Block> blocks) {
@@ -194,6 +201,8 @@ public final class OreveilWorldListener implements Listener {
             return;
         }
 
-        plugin.getServer().getScheduler().runTask(plugin, () -> snapshot.forEach(worldModel::refreshExposureState));
+        for (Block block : snapshot) {
+            scheduler.runAt(block.getLocation(), () -> worldModel.refreshExposureState(block));
+        }
     }
 }

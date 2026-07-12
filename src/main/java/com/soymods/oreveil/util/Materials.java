@@ -18,6 +18,10 @@ public final class Materials {
     public static final Material AMETHYST_SHARD = optional("AMETHYST_SHARD");
     public static final Material SPYGLASS = optional("SPYGLASS");
     public static final Material ECHO_SHARD = optional("ECHO_SHARD");
+    public static final Material RAW_COPPER_BLOCK = optional("RAW_COPPER_BLOCK");
+    public static final Material RAW_IRON_BLOCK = optional("RAW_IRON_BLOCK");
+    public static final Material RAW_GOLD_BLOCK = optional("RAW_GOLD_BLOCK");
+    public static final Material TUFF = optional("TUFF");
 
     private Materials() {
     }

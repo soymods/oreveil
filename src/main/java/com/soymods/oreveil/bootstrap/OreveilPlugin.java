@@ -15,6 +15,7 @@ import com.soymods.oreveil.obfuscation.scan.ChunkObfuscationPrimer;
 import com.soymods.oreveil.obfuscation.transport.TransportMode;
 import com.soymods.oreveil.ui.OreveilAdminGui;
 import com.soymods.oreveil.util.Materials;
+import com.soymods.oreveil.util.OreveilScheduler;
 import com.soymods.oreveil.world.AuthoritativeWorldModel;
 import com.soymods.oreveil.world.OreveilWorldGenerationService;
 import java.io.File;
@@ -47,6 +48,9 @@ public final class OreveilPlugin extends JavaPlugin {
         Materials.DEEPSLATE_IRON_ORE,
         Material.GOLD_ORE,
         Materials.DEEPSLATE_GOLD_ORE,
+        Materials.RAW_COPPER_BLOCK,
+        Materials.RAW_IRON_BLOCK,
+        Materials.RAW_GOLD_BLOCK,
         Material.REDSTONE_ORE,
         Materials.DEEPSLATE_REDSTONE_ORE,
         Material.EMERALD_ORE,
@@ -69,11 +73,17 @@ public final class OreveilPlugin extends JavaPlugin {
     private OreveilAdminGui adminGui;
     private ServerCompatibility compatibility;
     private Metrics metrics;
+    private OreveilScheduler scheduler;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        ensureRawOreBlockDefaults();
         ensurePrivateSecrets();
+        this.scheduler = new OreveilScheduler(this, getLogger());
+        if (scheduler.isFolia()) {
+            getLogger().info("Folia detected. Oreveil will use Folia schedulers and fallback block-update transport.");
+        }
         this.metrics = new Metrics(this, BSTATS_PLUGIN_ID);
 
         this.configLoader = new OreveilConfigLoader(getLogger());
@@ -82,7 +92,7 @@ public final class OreveilPlugin extends JavaPlugin {
         this.worldModel = new AuthoritativeWorldModel(this, getLogger(), oreveilConfig, compatibility);
         this.exposureService = new ExposureService(getLogger(), oreveilConfig);
         this.obfuscationService = new NetworkObfuscationService(this, getLogger(), oreveilConfig, worldModel, exposureService, compatibility);
-        this.worldGenerationService = new OreveilWorldGenerationService(this, getLogger(), oreveilConfig, compatibility);
+        this.worldGenerationService = new OreveilWorldGenerationService(this, getLogger(), oreveilConfig, compatibility, scheduler);
         this.adminGui = new OreveilAdminGui(this, compatibility);
         this.worldGenerationService.setMutationSync(blocks -> {
             blocks.forEach(worldModel::refreshBlock);
@@ -127,6 +137,47 @@ public final class OreveilPlugin extends JavaPlugin {
         if (changed) {
             saveConfig();
         }
+    }
+
+    private void ensureRawOreBlockDefaults() {
+        boolean changed = false;
+        changed |= ensureProtectedOre(Materials.RAW_COPPER_BLOCK);
+        changed |= ensureProtectedOre(Materials.RAW_IRON_BLOCK);
+        changed |= ensureProtectedOre(Materials.RAW_GOLD_BLOCK);
+        changed |= ensureHostOverride(Materials.RAW_COPPER_BLOCK, Material.GRANITE);
+        changed |= ensureHostOverride(Materials.RAW_IRON_BLOCK, Materials.TUFF == null ? Material.STONE : Materials.TUFF);
+        changed |= ensureHostOverride(Materials.RAW_GOLD_BLOCK, Material.STONE);
+        if (changed) {
+            saveConfig();
+            getLogger().info("Updated Oreveil config defaults for raw ore block protection.");
+        }
+    }
+
+    private boolean ensureProtectedOre(Material material) {
+        if (material == null) {
+            return false;
+        }
+        List<String> values = new ArrayList<>(getConfig().getStringList("protected-ores"));
+        String name = material.name();
+        if (values.stream().anyMatch(entry -> entry.equalsIgnoreCase(name))) {
+            return false;
+        }
+        values.add(name);
+        values.sort(String::compareToIgnoreCase);
+        getConfig().set("protected-ores", values);
+        return true;
+    }
+
+    private boolean ensureHostOverride(Material ore, Material host) {
+        if (ore == null || host == null) {
+            return false;
+        }
+        String path = "host-blocks.ore-overrides." + ore.name();
+        if (getConfig().isSet(path)) {
+            return false;
+        }
+        getConfig().set(path, host.name());
+        return true;
     }
 
     private static long nextNonZeroSecret() {
@@ -241,6 +292,10 @@ public final class OreveilPlugin extends JavaPlugin {
 
     public OreveilConfig oreveilConfig() {
         return oreveilConfig;
+    }
+
+    public OreveilScheduler scheduler() {
+        return scheduler;
     }
 
     public ExposureService exposureService() {

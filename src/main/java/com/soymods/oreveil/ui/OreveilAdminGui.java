@@ -1013,7 +1013,7 @@ public final class OreveilAdminGui implements Listener {
         signInputs.put(player.getUniqueId(), input);
         player.closeInventory();
         player.openSign(sign);
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        plugin.scheduler().runForLater(player, () -> {
             PendingSignInput pending = signInputs.get(player.getUniqueId());
             if (pending == input) {
                 signInputs.remove(player.getUniqueId());
@@ -1121,8 +1121,8 @@ public final class OreveilAdminGui implements Listener {
     }
 
     private void feedback(Player player, String message) {
-        if (!Bukkit.isPrimaryThread()) {
-            Bukkit.getScheduler().runTask(plugin, () -> feedback(player, message));
+        if (!plugin.scheduler().isFolia() && !Bukkit.isPrimaryThread()) {
+            plugin.scheduler().runFor(player, () -> feedback(player, message));
             return;
         }
         player.sendActionBar(Component.text(message, TITLE));
@@ -1449,7 +1449,7 @@ public final class OreveilAdminGui implements Listener {
 
         @Override
         public void onComplete(WorldRegenerationResult result) {
-            Bukkit.getScheduler().runTask(plugin, () -> handleWorldResult(player, result));
+            plugin.scheduler().runFor(player, () -> handleWorldResult(player, result));
         }
     }
 
